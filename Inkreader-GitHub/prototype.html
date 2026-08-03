@@ -1,0 +1,1194 @@
+<!DOCTYPE html>
+<!-- Original visual prototype preserved as the design reference. -->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>砚读 InkRead — 面向长上下文的高效稀疏注意力机制研究</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,300;1,9..144,400;1,9..144,500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&family=Noto+Serif+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   砚读 InkRead — 数字学者书房
+   设计语言：编辑级排版 · 暖纸墨韵 · 旁注层 · 副驾坞
+   ============================================================ */
+:root{
+  --paper:        #F6F1E6;
+  --paper-2:      #EFE8D8;
+  --paper-3:      #E7DECB;
+  --ink:          #221D15;
+  --ink-soft:     #5C5342;
+  --ink-faint:    #8A7F68;
+  --hairline:     #D8CDB6;
+  --hairline-soft:#E3DAC6;
+  --accent:       #8C2F39;   /* 胭脂 Oxblood */
+  --accent-soft:  rgba(140,47,57,.08);
+  --green:        #2E4B3F;   /* 松烟 Deep green */
+  --brass:        #A8842F;   /* 黄铜 Brass */
+  --hl-wash:      rgba(168,132,47,.20);
+  --hl-wash-hot:  rgba(168,132,47,.40);
+  --note-bg:      #FBF7EE;
+  --shadow-pop:   0 18px 50px -12px rgba(34,29,21,.28), 0 4px 14px -4px rgba(34,29,21,.14);
+  --serif-d: "Fraunces","Noto Serif SC",serif;
+  --serif-b: "Newsreader","Noto Serif SC",serif;
+  --mono:    "IBM Plex Mono",monospace;
+}
+body.night{
+  --paper:        #191610;
+  --paper-2:      #14110C;
+  --paper-3:      #221E16;
+  --ink:          #E9E1CE;
+  --ink-soft:     #B3A88E;
+  --ink-faint:    #7E7460;
+  --hairline:     #35301F;
+  --hairline-soft:#2B271A;
+  --accent:       #D0798A;
+  --accent-soft:  rgba(208,121,138,.10);
+  --green:        #9CC3B0;
+  --brass:        #C9A558;
+  --hl-wash:      rgba(201,165,88,.16);
+  --hl-wash-hot:  rgba(201,165,88,.38);
+  --note-bg:      #201C13;
+  --shadow-pop:   0 18px 50px -12px rgba(0,0,0,.6), 0 4px 14px -4px rgba(0,0,0,.4);
+}
+
+*{ margin:0; padding:0; box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  font-family:var(--serif-b);
+  background:var(--paper-2);
+  color:var(--ink);
+  overflow:hidden;
+  transition:background .5s ease, color .5s ease;
+}
+::selection{ background:var(--hl-wash-hot); color:var(--ink); }
+
+/* ---------- 整体骨架 ---------- */
+.app{ display:flex; height:100vh; }
+
+/* ============================================================
+   1. 左侧仪轨栏 Rail
+   ============================================================ */
+.rail{
+  width:72px; flex:none;
+  background:var(--paper-2);
+  border-right:1px solid var(--hairline-soft);
+  display:flex; flex-direction:column; align-items:center;
+  padding:20px 0 18px;
+  z-index:30;
+  transition:transform .5s cubic-bezier(.7,0,.2,1), background .5s ease;
+}
+.rail .seal{
+  width:40px; height:40px; border-radius:11px;
+  background:var(--ink); color:var(--paper);
+  display:grid; place-items:center;
+  font-family:var(--serif-d); font-weight:600; font-size:19px;
+  margin-bottom:26px; cursor:pointer;
+  transition:transform .35s cubic-bezier(.34,1.56,.64,1);
+}
+.rail .seal:hover{ transform:rotate(-8deg) scale(1.06); }
+.rail nav{ display:flex; flex-direction:column; gap:6px; flex:1; }
+.rail button{
+  width:44px; height:44px; border:none; background:transparent;
+  border-radius:12px; cursor:pointer; color:var(--ink-faint);
+  display:grid; place-items:center; position:relative;
+  transition:color .25s, background .25s;
+}
+.rail button svg{ width:20px; height:20px; }
+.rail button:hover{ color:var(--ink); background:var(--paper-3); }
+.rail button.on{ color:var(--accent); }
+.rail button.on::before{
+  content:""; position:absolute; left:-14px; top:50%; translate:0 -50%;
+  width:3px; height:20px; border-radius:2px; background:var(--accent);
+}
+.rail .tip{
+  position:absolute; left:58px; top:50%; translate:0 -50%;
+  background:var(--ink); color:var(--paper);
+  font-family:var(--mono); font-size:11px; padding:5px 9px; border-radius:6px;
+  white-space:nowrap; opacity:0; pointer-events:none;
+  transition:opacity .2s, translate .25s; translate:-6px -50%;
+}
+.rail button:hover .tip{ opacity:1; translate:0 -50%; }
+.rail .brand{
+  writing-mode:vertical-rl; letter-spacing:.42em;
+  font-family:var(--mono); font-size:10px; color:var(--ink-faint);
+  text-transform:uppercase; margin-top:18px; user-select:none;
+}
+
+/* ============================================================
+   2. 目录廊 Outline
+   ============================================================ */
+.outline{
+  width:296px; flex:none;
+  background:var(--paper);
+  border-right:1px solid var(--hairline-soft);
+  display:flex; flex-direction:column;
+  transition:margin-left .5s cubic-bezier(.7,0,.2,1), background .5s ease;
+  overflow:hidden;
+}
+body.focus .outline{ margin-left:-296px; }
+body.focus .rail{ transform:translateX(-72px); width:0; padding:0; border:none; }
+
+.out-meta{ padding:26px 26px 20px; border-bottom:1px solid var(--hairline-soft); }
+.out-meta .venue{
+  font-family:var(--mono); font-size:10px; letter-spacing:.14em;
+  color:var(--brass); text-transform:uppercase; margin-bottom:9px;
+  display:flex; align-items:center; gap:7px;
+}
+.out-meta .venue::before{ content:""; width:16px; height:1px; background:var(--brass); }
+.out-meta h2{
+  font-family:var(--serif-d); font-weight:500; font-size:16.5px;
+  line-height:1.45; letter-spacing:.01em;
+}
+.out-meta .authors-line{
+  margin-top:9px; font-size:12.5px; color:var(--ink-faint); font-style:italic;
+}
+
+/* ============================================================
+   2b. 右侧 AI 助手栏
+   ============================================================ */
+.ai-side{
+  width:300px; flex:none;
+  background:var(--paper);
+  border-left:1px solid var(--hairline-soft);
+  display:flex; flex-direction:column;
+  transition:margin-right .5s cubic-bezier(.7,0,.2,1), background .5s ease;
+  overflow:hidden;
+}
+body.focus .ai-side{ margin-right:-300px; }
+.ai-head{
+  flex:none; display:flex; align-items:center; gap:12px;
+  padding:18px 18px 15px;
+  border-bottom:1px solid var(--hairline-soft);
+}
+.ai-head .h-orb{
+  width:30px; height:30px; border-radius:50%; flex:none; position:relative;
+  background:conic-gradient(from 120deg, var(--brass), var(--accent), var(--green), var(--brass));
+  animation:spin 6s linear infinite;
+}
+.ai-head .h-orb::after{ content:""; position:absolute; inset:3.5px; border-radius:50%; background:var(--paper); }
+.ai-head .h-t{ font-family:var(--serif-d); font-size:15px; font-weight:500; }
+.ai-head .h-s{
+  font-family:var(--mono); font-size:9px; letter-spacing:.14em;
+  color:var(--ink-faint); text-transform:uppercase; margin-top:3px;
+  display:flex; align-items:center; gap:6px;
+}
+.ai-head .h-s::before{
+  content:""; width:5px; height:5px; border-radius:50%; background:var(--green);
+  animation:pulseDot 2.4s ease-in-out infinite;
+}
+@keyframes pulseDot{ 50%{ opacity:.25; transform:scale(.7); } }
+
+/* 目录 + 进度脊线 */
+.toc-wrap{ flex:1; overflow-y:auto; padding:20px 0; scrollbar-width:none; }
+.toc-wrap::-webkit-scrollbar{ display:none; }
+.toc-label{
+  font-family:var(--mono); font-size:10px; letter-spacing:.22em;
+  color:var(--ink-faint); text-transform:uppercase;
+  padding:0 26px 12px;
+}
+.toc{ position:relative; list-style:none; padding-left:26px; }
+.toc::before{ /* 脊线 */
+  content:""; position:absolute; left:26px; top:6px; bottom:6px;
+  width:1px; background:var(--hairline);
+}
+.toc-fill{
+  position:absolute; left:26px; top:6px; width:1px;
+  background:var(--accent); height:0; transition:height .15s linear;
+  z-index:1;
+}
+.toc-dot{
+  position:absolute; left:23px; width:7px; height:7px; border-radius:50%;
+  background:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);
+  transition:top .15s linear; z-index:2;
+}
+.toc li{ position:relative; }
+.toc a{
+  display:flex; align-items:baseline; gap:11px;
+  padding:8.5px 20px 8.5px 22px;
+  text-decoration:none; color:var(--ink-soft);
+  font-size:13.5px; line-height:1.4;
+  border-left:1px solid transparent;
+  transition:color .25s, background .25s;
+  cursor:pointer;
+}
+.toc a .no{
+  font-family:var(--mono); font-size:10px; color:var(--ink-faint);
+  transition:color .25s; flex:none;
+}
+.toc a:hover{ color:var(--ink); background:linear-gradient(90deg, var(--accent-soft), transparent); }
+.toc li.active a{ color:var(--accent); font-weight:500; }
+.toc li.active a .no{ color:var(--accent); }
+.toc li.sub a{ padding-left:40px; font-size:12.5px; }
+
+/* 阅读仪表 */
+.out-stats{
+  border-top:1px solid var(--hairline-soft);
+  padding:18px 26px 22px;
+  display:grid; grid-template-columns:1fr 1fr; gap:14px 10px;
+}
+.stat .v{
+  font-family:var(--serif-d); font-size:21px; font-weight:500; line-height:1;
+  font-variant-numeric:tabular-nums;
+}
+.stat .v em{ font-style:normal; font-size:12px; color:var(--ink-faint); margin-left:2px; }
+.stat .k{
+  font-family:var(--mono); font-size:9.5px; letter-spacing:.14em;
+  color:var(--ink-faint); text-transform:uppercase; margin-top:6px;
+}
+.stat.ring{ grid-column:1 / -1; display:flex; align-items:center; gap:14px; }
+.ring-svg{ width:52px; height:52px; transform:rotate(-90deg); }
+.ring-svg .bg{ stroke:var(--hairline); }
+.ring-svg .fg{ stroke:var(--accent); stroke-linecap:round; transition:stroke-dashoffset .2s linear; }
+.stat.ring .big{ font-family:var(--serif-d); font-size:24px; font-weight:500; }
+.stat.ring .sub{ font-family:var(--mono); font-size:9.5px; letter-spacing:.12em; color:var(--ink-faint); text-transform:uppercase; margin-top:3px; }
+
+/* ============================================================
+   3. 主舞台 Stage
+   ============================================================ */
+.stage{ flex:1; display:flex; flex-direction:column; min-width:0; position:relative; background:var(--paper); transition:background .5s ease; }
+
+/* 顶栏 */
+.topbar{
+  height:58px; flex:none;
+  display:flex; align-items:center; gap:18px;
+  padding:0 26px;
+  border-bottom:1px solid var(--hairline-soft);
+  position:relative; z-index:20;
+  background:color-mix(in srgb, var(--paper) 82%, transparent);
+  backdrop-filter:blur(10px);
+}
+.progress-hairline{
+  position:absolute; left:0; top:-1px; height:2px; width:100%;
+  background:transparent; pointer-events:none;
+}
+.progress-hairline i{ display:block; height:100%; width:0; background:var(--accent); transition:width .15s linear; }
+.crumb{
+  font-family:var(--mono); font-size:11.5px; color:var(--ink-faint);
+  display:flex; align-items:center; gap:9px; min-width:0;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.crumb b{ color:var(--ink); font-weight:500; }
+.crumb .sep{ opacity:.5; }
+.crumb .arxiv{
+  color:var(--brass); border:1px solid color-mix(in srgb, var(--brass) 40%, transparent);
+  padding:2px 7px; border-radius:20px; font-size:10px; flex:none;
+}
+.top-actions{ margin-left:auto; display:flex; align-items:center; gap:8px; flex:none; }
+.tbtn{
+  border:1px solid var(--hairline); background:transparent; color:var(--ink-soft);
+  font-family:var(--mono); font-size:11px; letter-spacing:.06em;
+  height:32px; padding:0 13px; border-radius:18px; cursor:pointer;
+  display:flex; align-items:center; gap:7px;
+  transition:all .25s;
+}
+.tbtn svg{ width:13px; height:13px; }
+.tbtn:hover{ border-color:var(--ink-faint); color:var(--ink); }
+.tbtn.on{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
+.avatar{
+  width:32px; height:32px; border-radius:50%;
+  background:linear-gradient(135deg, var(--green), var(--brass));
+  color:#fff; display:grid; place-items:center;
+  font-family:var(--serif-d); font-size:13px; margin-left:6px; cursor:pointer;
+}
+
+/* 阅读滚动区 */
+.reader{ flex:1; overflow-y:auto; position:relative; scroll-behavior:smooth; }
+.reader::-webkit-scrollbar{ width:10px; }
+.reader::-webkit-scrollbar-thumb{ background:var(--hairline); border-radius:6px; border:3px solid var(--paper); }
+.reader::-webkit-scrollbar-track{ background:transparent; }
+
+/* 纸面 —— 网格：正文列 + 旁注列 */
+.paper{
+  position:relative;
+  max-width:1020px;
+  margin:0 auto;
+  padding:64px 40px 180px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 252px;
+  column-gap:52px;
+}
+body.focus .paper{ max-width:820px; grid-template-columns:minmax(0,1fr) 0px; }
+body.focus .margin-col{ opacity:0; pointer-events:none; }
+.margin-col{ transition:opacity .4s; position:relative; }
+
+/* ---- 论文头 ---- */
+.p-head{ grid-column:1; margin-bottom:38px; }
+.p-kicker{
+  display:flex; align-items:center; gap:12px;
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.2em;
+  color:var(--brass); text-transform:uppercase; margin-bottom:20px;
+}
+.p-kicker::after{ content:""; flex:1; height:1px; background:var(--hairline); }
+.p-head h1{
+  font-family:var(--serif-d); font-weight:500;
+  font-size:clamp(28px, 3.4vw, 40px);
+  line-height:1.22; letter-spacing:.005em;
+}
+.p-head h1 em{ font-style:italic; font-weight:400; color:var(--accent); }
+.p-authors{
+  margin-top:18px; font-size:14px; color:var(--ink-soft); font-style:italic; line-height:1.7;
+}
+.p-authors sup{ font-family:var(--mono); font-style:normal; font-size:9px; color:var(--brass); }
+.p-aff{ margin-top:5px; font-family:var(--mono); font-size:10.5px; color:var(--ink-faint); letter-spacing:.04em; }
+
+.abstract{
+  margin-top:30px;
+  border:1px solid var(--hairline);
+  border-radius:4px;
+  padding:24px 26px;
+  background:
+    linear-gradient(var(--paper-2), var(--paper-2)) padding-box;
+  position:relative;
+}
+.abstract::before{
+  content:"摘要 · ABSTRACT"; position:absolute; top:-8px; left:20px;
+  background:var(--paper); padding:0 10px;
+  font-family:var(--mono); font-size:9.5px; letter-spacing:.24em; color:var(--ink-faint);
+}
+.abstract p{ font-size:14.5px; line-height:1.85; color:var(--ink-soft); text-align:justify; }
+.keywords{ margin-top:14px; display:flex; flex-wrap:wrap; gap:8px; }
+.keywords span{
+  font-family:var(--mono); font-size:10.5px; color:var(--ink-soft);
+  border:1px solid var(--hairline); border-radius:20px; padding:3.5px 11px;
+  transition:all .25s; cursor:default;
+}
+.keywords span:hover{ border-color:var(--brass); color:var(--brass); }
+
+/* ---- 正文 ---- */
+.p-body{ grid-column:1; }
+.p-body section{ margin-bottom:14px; }
+.p-body h2{
+  font-family:var(--serif-d); font-weight:500; font-size:23px;
+  margin:44px 0 18px; display:flex; align-items:baseline; gap:14px;
+  scroll-margin-top:80px;
+}
+.p-body h2 .no{
+  font-family:var(--mono); font-size:12px; color:var(--accent); font-weight:400;
+}
+.p-body h2::after{ content:""; flex:1; height:1px; background:var(--hairline-soft); translate:0 -4px; }
+.p-body h3{
+  font-family:var(--serif-d); font-weight:500; font-size:16.5px; font-style:italic;
+  margin:26px 0 10px; color:var(--green); scroll-margin-top:80px;
+}
+.p-body p{
+  font-size:15.5px; line-height:1.92; margin-bottom:16px;
+  text-align:justify; hyphens:auto;
+}
+.p-body p .first-word{ font-variant:small-caps; letter-spacing:.06em; font-weight:500; }
+.dropcap::first-letter{
+  font-family:var(--serif-d); font-weight:600;
+  font-size:56px; line-height:.82;
+  float:left; padding:7px 12px 0 0;
+  color:var(--accent);
+}
+
+/* 行内高亮 —— 与旁注锚定 */
+.hl{
+  background:linear-gradient(to top, var(--hl-wash), var(--hl-wash));
+  border-bottom:1px solid color-mix(in srgb, var(--brass) 55%, transparent);
+  padding:1px 1px; border-radius:2px;
+  cursor:pointer; position:relative;
+  transition:background .25s;
+}
+.hl:hover, .hl.lit{ background:linear-gradient(to top, var(--hl-wash-hot), var(--hl-wash-hot)); }
+.hl .anchor-idx{
+  font-family:var(--mono); font-size:9px; color:var(--brass);
+  vertical-align:super; margin-left:2px; user-select:none;
+}
+
+/* 引用 */
+.cite{
+  font-family:var(--mono); font-size:11px; color:var(--accent);
+  cursor:pointer; padding:0 1px;
+  border-bottom:1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+  transition:background .2s;
+}
+.cite:hover{ background:var(--accent-soft); }
+
+/* 术语 */
+.term{
+  border-bottom:1px dotted var(--ink-faint);
+  cursor:help; transition:all .2s;
+}
+.term:hover{ color:var(--green); border-bottom-color:var(--green); }
+
+/* 公式 */
+.eq{
+  margin:26px 0; padding:22px 26px;
+  background:var(--note-bg);
+  border:1px solid var(--hairline-soft);
+  border-left:2px solid var(--green);
+  border-radius:3px;
+  display:flex; align-items:center; gap:24px;
+  overflow-x:auto;
+}
+.eq .math{
+  font-family:var(--serif-d); font-style:italic; font-size:17.5px;
+  white-space:nowrap; color:var(--ink);
+}
+.eq .math sub, .eq .math sup{ font-size:11px; }
+.eq .math .op{ font-style:normal; color:var(--accent); padding:0 4px; }
+.eq .eqno{ margin-left:auto; font-family:var(--mono); font-size:11px; color:var(--ink-faint); flex:none; }
+
+/* 图 */
+figure{ margin:32px 0; }
+.fig-frame{
+  border:1px solid var(--hairline);
+  border-radius:4px; padding:22px;
+  background:var(--note-bg);
+}
+figcaption{
+  margin-top:13px; font-size:12.5px; line-height:1.7; color:var(--ink-soft);
+  display:flex; gap:10px;
+}
+figcaption .fig-no{
+  font-family:var(--mono); font-size:10px; color:var(--accent);
+  letter-spacing:.1em; flex:none; padding-top:2px;
+}
+.heatmap{ display:grid; grid-template-columns:repeat(24,1fr); gap:2px; }
+.heatmap i{ aspect-ratio:1; border-radius:1.5px; transition:transform .15s; }
+.heatmap i:hover{ transform:scale(1.35); }
+.fig-legend{
+  display:flex; align-items:center; gap:8px; margin-top:12px;
+  font-family:var(--mono); font-size:9.5px; color:var(--ink-faint); letter-spacing:.08em;
+}
+.fig-legend .grad{ flex:1; max-width:160px; height:6px; border-radius:3px; background:linear-gradient(90deg, var(--paper-3), var(--brass), var(--accent)); }
+
+/* 表格 */
+table{
+  width:100%; border-collapse:collapse; margin:8px 0 4px;
+  font-size:13.5px;
+}
+caption{
+  text-align:left; font-size:12.5px; color:var(--ink-soft);
+  padding-bottom:12px; display:flex; gap:10px;
+}
+caption .fig-no{ font-family:var(--mono); font-size:10px; color:var(--accent); letter-spacing:.1em; padding-top:2px; }
+thead th{
+  font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--ink-faint); font-weight:500;
+  text-align:left; padding:9px 12px;
+  border-top:1.5px solid var(--ink); border-bottom:1px solid var(--ink);
+}
+tbody td{
+  padding:9.5px 12px; border-bottom:1px solid var(--hairline-soft);
+  font-variant-numeric:tabular-nums;
+}
+tbody tr:hover td{ background:var(--accent-soft); }
+tbody td.best{ color:var(--accent); font-weight:600; }
+tbody td:first-child{ font-weight:500; }
+tfoot td{ padding:8px 12px; font-family:var(--mono); font-size:10px; color:var(--ink-faint); }
+
+/* 参考文献 */
+.refs{ list-style:none; counter-reset:ref; }
+.refs li{
+  counter-increment:ref; position:relative;
+  padding:9px 0 9px 40px; font-size:13px; line-height:1.7; color:var(--ink-soft);
+  border-bottom:1px dashed var(--hairline-soft);
+}
+.refs li::before{
+  content:"[" counter(ref) "]";
+  position:absolute; left:0; top:9px;
+  font-family:var(--mono); font-size:10.5px; color:var(--brass);
+}
+.refs li em{ color:var(--ink); }
+
+/* ============================================================
+   4. 旁注层 Margin Notes
+   ============================================================ */
+.margin-note{
+  position:absolute; left:0; width:252px;
+  padding:14px 16px 13px;
+  background:var(--note-bg);
+  border:1px solid var(--hairline-soft);
+  border-radius:4px;
+  font-size:12px; line-height:1.75; color:var(--ink-soft);
+  cursor:pointer; opacity:.62;
+  transition:opacity .3s, transform .3s cubic-bezier(.34,1.3,.64,1), border-color .3s, box-shadow .3s;
+}
+.margin-note::before{ /* 连接发丝线 */
+  content:""; position:absolute; left:-53px; top:22px; width:52px; height:1px;
+  background:var(--hairline); transition:background .3s;
+}
+.margin-note::after{ /* 连接点 */
+  content:""; position:absolute; left:-56px; top:19.5px; width:6px; height:6px;
+  border-radius:50%; background:var(--brass); transition:transform .3s;
+}
+.margin-note:hover, .margin-note.lit{
+  opacity:1; border-color:var(--brass);
+  transform:translateX(4px);
+  box-shadow:var(--shadow-pop);
+  z-index:5;
+}
+.margin-note.lit::before, .margin-note:hover::before{ background:var(--brass); }
+.margin-note.lit::after, .margin-note:hover::after{ transform:scale(1.5); }
+.mn-tag{
+  display:flex; align-items:center; gap:7px;
+  font-family:var(--mono); font-size:9px; letter-spacing:.16em;
+  text-transform:uppercase; margin-bottom:7px;
+}
+.mn-tag i{ width:6px; height:6px; border-radius:50%; flex:none; }
+.mn-tag .idx{ margin-left:auto; color:var(--ink-faint); }
+.mn-tag.t-explain{ color:var(--green); }   .mn-tag.t-explain i{ background:var(--green); }
+.mn-tag.t-doubt{ color:var(--accent); }    .mn-tag.t-doubt i{ background:var(--accent); }
+.mn-tag.t-link{ color:var(--brass); }      .mn-tag.t-link i{ background:var(--brass); }
+.mn-tag.t-warn{ color:#B0603C; }           .mn-tag.t-warn i{ background:#B0603C; }
+.margin-note .mn-foot{
+  margin-top:9px; padding-top:8px; border-top:1px dashed var(--hairline);
+  font-family:var(--mono); font-size:9.5px; color:var(--ink-faint);
+  display:flex; justify-content:space-between;
+}
+.ai-sig{ display:flex; align-items:center; gap:5px; }
+.ai-sig::before{ content:""; width:5px; height:5px; border-radius:50%; background:var(--brass); }
+
+/* ============================================================
+   5. AI 助手（左侧边栏视图）
+   ============================================================ */
+.ai-msgs{
+  flex:1; overflow-y:auto; min-height:0;
+  padding:18px 16px 10px;
+  display:flex; flex-direction:column; gap:14px;
+}
+.ai-msgs::-webkit-scrollbar{ width:6px; }
+.ai-msgs::-webkit-scrollbar-thumb{ background:var(--hairline); border-radius:3px; }
+
+.msg{ display:flex; gap:9px; max-width:100%; animation:riseIn .45s cubic-bezier(.2,.7,.2,1); }
+.msg .m-orb{
+  width:22px; height:22px; border-radius:50%; flex:none; margin-top:2px;
+  background:conic-gradient(from 120deg, var(--brass), var(--accent), var(--green), var(--brass));
+  animation:spin 6s linear infinite; position:relative;
+}
+.msg .m-orb::after{ content:""; position:absolute; inset:2.5px; border-radius:50%; background:var(--paper); }
+@keyframes spin{ to{ rotate:360deg; } }
+.msg .m-body{
+  font-size:13px; line-height:1.8; color:var(--ink);
+  border-left:2px solid var(--brass); padding-left:11px;
+  min-width:0;
+}
+.msg .m-body .cursor{
+  display:inline-block; width:6px; height:13px; background:var(--brass);
+  vertical-align:-2px; animation:blink .8s steps(1) infinite;
+}
+@keyframes blink{ 50%{ opacity:0; } }
+.msg .m-body .src{
+  display:inline-block; margin-top:7px;
+  font-family:var(--mono); font-size:9px; color:var(--green);
+  border:1px solid color-mix(in srgb, var(--green) 35%, transparent);
+  padding:2px 8px; border-radius:12px; cursor:pointer;
+}
+.msg .m-body .src:hover{ background:var(--accent-soft); }
+.msg.user{ flex-direction:row-reverse; }
+.msg.user .m-body{
+  border-left:none; border-right:none;
+  background:var(--paper-3);
+  border-radius:12px 12px 3px 12px;
+  padding:8px 13px; font-size:12.5px; color:var(--ink);
+  max-width:82%;
+}
+.msg.greet .m-body em{ color:var(--accent); font-style:italic; }
+
+.ai-chips{
+  flex:none; display:flex; flex-wrap:wrap; gap:6px;
+  padding:10px 14px 4px;
+  border-top:1px solid var(--hairline-soft);
+}
+.chip{
+  font-family:var(--serif-b); font-size:11.5px; color:var(--ink-soft);
+  border:1px solid var(--hairline); background:transparent;
+  padding:4.5px 11px; border-radius:20px; cursor:pointer;
+  transition:all .25s; display:flex; align-items:center; gap:5px;
+}
+.chip:hover{ border-color:var(--brass); color:var(--brass); transform:translateY(-1px); }
+
+.ai-input{
+  flex:none; display:flex; align-items:center; gap:9px;
+  padding:10px 14px 13px;
+}
+.ai-input input{
+  flex:1; min-width:0;
+  border:1px solid var(--hairline); border-radius:18px;
+  background:var(--note-bg); outline:none;
+  font-family:var(--serif-b); font-size:13px; color:var(--ink);
+  padding:8px 14px;
+  transition:border-color .25s;
+}
+.ai-input input:focus{ border-color:var(--brass); }
+.ai-input input::placeholder{ color:var(--ink-faint); font-style:italic; }
+.ai-input .send{
+  border:none; background:var(--ink); color:var(--paper);
+  font-family:var(--mono); font-size:10px; letter-spacing:.08em;
+  width:32px; height:32px; border-radius:50%; cursor:pointer; flex:none;
+  display:grid; place-items:center;
+  transition:transform .2s, opacity .2s;
+}
+.ai-input .send:hover{ transform:translateY(-1px) scale(1.05); opacity:.88; }
+.ai-input .send svg{ width:13px; height:13px; }
+
+/* ============================================================
+   6. 浮层：引用卡 & 术语签
+   ============================================================ */
+.pop{
+  position:fixed; z-index:100; width:300px;
+  background:var(--note-bg);
+  border:1px solid var(--hairline);
+  border-radius:8px; box-shadow:var(--shadow-pop);
+  padding:16px 18px;
+  opacity:0; pointer-events:none;
+  transform:translateY(6px) scale(.98);
+  transition:opacity .22s, transform .22s cubic-bezier(.34,1.4,.64,1);
+}
+.pop.show{ opacity:1; transform:translateY(0) scale(1); pointer-events:auto; }
+.pop .pop-no{
+  font-family:var(--mono); font-size:9.5px; color:var(--brass); letter-spacing:.18em;
+  margin-bottom:8px; display:flex; align-items:center; gap:8px;
+}
+.pop .pop-no::after{ content:""; flex:1; height:1px; background:var(--hairline); }
+.pop h4{ font-family:var(--serif-d); font-weight:500; font-size:14.5px; line-height:1.45; margin-bottom:6px; }
+.pop .pop-authors{ font-size:11.5px; font-style:italic; color:var(--ink-soft); margin-bottom:9px; }
+.pop .pop-sum{
+  font-size:11.5px; line-height:1.7; color:var(--ink-soft);
+  border-left:2px solid var(--brass); padding-left:10px;
+}
+.pop .pop-sum b{ font-family:var(--mono); font-size:9px; color:var(--brass); letter-spacing:.12em; display:block; margin-bottom:3px; font-weight:500; }
+.pop .pop-foot{ margin-top:10px; display:flex; gap:8px; }
+.pop .pop-foot button{
+  flex:1; font-family:var(--mono); font-size:9.5px; letter-spacing:.08em;
+  padding:5px 0; border-radius:5px; cursor:pointer;
+  border:1px solid var(--hairline); background:transparent; color:var(--ink-soft);
+  transition:all .2s;
+}
+.pop .pop-foot button:hover{ border-color:var(--brass); color:var(--brass); }
+
+.pop.term-pop{ width:260px; }
+.pop.term-pop .t-word{ font-family:var(--serif-d); font-size:15px; font-weight:500; margin-bottom:2px; }
+.pop.term-pop .t-en{ font-family:var(--mono); font-size:9.5px; color:var(--ink-faint); letter-spacing:.08em; margin-bottom:8px; }
+.pop.term-pop p{ font-size:12px; line-height:1.7; color:var(--ink-soft); }
+
+/* ============================================================
+   7. 质感：纸纹 / 颗粒 / 入场
+   ============================================================ */
+.grain{
+  position:fixed; inset:0; z-index:90; pointer-events:none; opacity:.5;
+  mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+body.night .grain{ mix-blend-mode:screen; opacity:.35; }
+
+@keyframes riseIn{
+  from{ opacity:0; transform:translateY(22px); }
+  to{ opacity:1; transform:translateY(0); }
+}
+.rise{ opacity:0; animation:riseIn .8s cubic-bezier(.2,.7,.2,1) forwards; }
+.rise.d1{ animation-delay:.05s } .rise.d2{ animation-delay:.14s }
+.rise.d3{ animation-delay:.23s } .rise.d4{ animation-delay:.32s }
+.rise.d5{ animation-delay:.41s } .rise.d6{ animation-delay:.5s }
+
+/* 响应式：先收右栏，再收旁注 */
+@media (max-width:1320px){
+  .ai-side{ display:none; }
+}
+@media (max-width:1180px){
+  .paper{ grid-template-columns:minmax(0,1fr); }
+  .margin-col{ display:none; }
+  .outline{ width:264px; }
+  body.focus .outline{ margin-left:-264px; }
+}
+@media (max-width:860px){
+  .outline{ display:none; }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ═══════ 仪轨栏 ═══════ -->
+  <div class="rail">
+    <div class="seal" title="砚读">砚</div>
+    <nav>
+      <button class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5V5.5"/><path d="M20 18v3H6.5"/></svg><span class="tip">文库 Library</span></button>
+      <button id="railAi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg><span class="tip">AI 助手 · ⌘K</span></button>
+      <button id="railToc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1" fill="currentColor"/><circle cx="4" cy="12" r="1" fill="currentColor"/><circle cx="4" cy="18" r="1" fill="currentColor"/></svg><span class="tip">大纲 Outline</span></button>
+      <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg><span class="tip">笔记 Notes · 5</span></button>
+      <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="8" r="2.4"/><circle cx="11" cy="18" r="2.4"/><path d="M8.2 7.2l7.4.4M7 8.2l3 7.4M16.4 10.2l-4 5.6"/></svg><span class="tip">引用图谱 Graph</span></button>
+      <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.9 2.9l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.9-2.9l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.9-2.9l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.9 2.9l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1h.2a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1z"/></svg><span class="tip">设置 Settings</span></button>
+    </nav>
+    <div class="brand">InkRead · 砚读</div>
+  </div>
+
+  <!-- ═══════ 目录廊 ═══════ -->
+  <aside class="outline">
+    <div class="out-meta">
+      <div class="venue">arXiv · cs.CL · 2026</div>
+      <h2>面向长上下文的高效稀疏注意力机制研究</h2>
+      <div class="authors-line">林澈, 王叙白, 沈观澜 等</div>
+    </div>
+
+    <div class="toc-wrap">
+      <div class="toc-label">大纲 · Contents</div>
+      <ul class="toc" id="toc">
+        <div class="toc-fill" id="tocFill"></div>
+        <div class="toc-dot" id="tocDot" style="top:6px"></div>
+        <li class="active"><a data-sec="s1"><span class="no">01</span>引言</a></li>
+        <li><a data-sec="s2"><span class="no">02</span>相关工作</a></li>
+        <li><a data-sec="s3"><span class="no">03</span>方法：稀疏路由注意力</a></li>
+        <li class="sub"><a data-sec="s3-1"><span class="no">3.1</span>Top-k 令牌路由</a></li>
+        <li class="sub"><a data-sec="s3-2"><span class="no">3.2</span>路由正则与负载均衡</a></li>
+        <li><a data-sec="s4"><span class="no">04</span>实验</a></li>
+        <li class="sub"><a data-sec="s4-1"><span class="no">4.1</span>长文基准结果</a></li>
+        <li><a data-sec="s5"><span class="no">05</span>结论与局限</a></li>
+        <li><a data-sec="s6"><span class="no">06</span>参考文献</a></li>
+      </ul>
+    </div>
+
+    <div class="out-stats">
+      <div class="stat ring">
+        <svg class="ring-svg" viewBox="0 0 52 52">
+          <circle class="bg" cx="26" cy="26" r="22" fill="none" stroke-width="3"/>
+          <circle class="fg" id="ringFg" cx="26" cy="26" r="22" fill="none" stroke-width="3"
+                  stroke-dasharray="138.2" stroke-dashoffset="138.2"/>
+        </svg>
+        <div>
+          <div class="big" id="pctBig">0%</div>
+          <div class="sub">已读 Progress</div>
+        </div>
+      </div>
+      <div class="stat"><div class="v">14<em>min</em></div><div class="k">剩余 Left</div></div>
+      <div class="stat"><div class="v">5</div><div class="k">AI 旁注 Notes</div></div>
+    </div>
+  </aside>
+
+  <!-- ═══════ 主舞台 ═══════ -->
+  <main class="stage">
+    <header class="topbar">
+      <div class="progress-hairline"><i id="hairFill"></i></div>
+      <div class="crumb">
+        文库 <span class="sep">/</span> 机器学习 <span class="sep">/</span> <b>面向长上下文的高效稀疏注意力机制研究</b>
+        <span class="arxiv">arXiv:2601.08472</span>
+      </div>
+      <div class="top-actions">
+        <button class="tbtn" id="focusBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+          沉浸
+        </button>
+        <button class="tbtn" id="themeBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+          夜读
+        </button>
+        <div class="avatar">澈</div>
+      </div>
+    </header>
+
+    <div class="reader" id="scroller">
+      <article class="paper" id="paper">
+
+        <!-- 论文正文列 -->
+        <div class="p-head rise d1">
+          <div class="p-kicker">Research Article · 机器学习</div>
+          <h1>面向长上下文的高效<em>稀疏注意力</em>机制研究</h1>
+          <div class="p-authors">林澈<sup>1,2</sup> · 王叙白<sup>1</sup> · 沈观澜<sup>2</sup> · 顾青梧<sup>1</sup> · 江晚舟<sup>2,†</sup></div>
+          <div class="p-aff">1 澄怀智能研究院 &nbsp;·&nbsp; 2 江南大学 人工智能与计算学院 &nbsp;·&nbsp; † 通讯作者</div>
+          <div class="abstract rise d2">
+            <p>自注意力机制的二次复杂度长期制约着 Transformer 在长上下文场景中的应用。本文提出<strong>稀疏路由注意力（Sparse-Routed Attention, SRA）</strong>：一种受混合专家模型启发的注意力稀疏化范式，通过可学习的 Top-k 令牌路由器，将每个查询动态分配至最相关的键值块，在保持模型表达能力的同时将注意力计算量降低至近线性。在 128K 上下文长度的语言建模与检索基准上，SRA 以 3.1× 的推理加速取得了与全注意力相当的困惑度，并在「大海捞针」检索任务上超出稀疏基线 11.4 个百分点。</p>
+            <div class="keywords">
+              <span>稀疏注意力</span><span>长上下文</span><span>Top-k 路由</span><span>混合专家</span><span>高效推理</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-body">
+          <section>
+            <h2 id="s1" class="rise d3"><span class="no">01</span>引言</h2>
+            <p class="dropcap">近年来，大语言模型的上下文窗口从数千令牌扩展至数十万乃至百万量级，长文档理解、代码库级分析与多轮智能体交互等应用随之兴起。然而，标准自注意力机制<span class="cite" data-cite="1">[1]</span>对序列长度的二次计算与显存开销，已成为制约长上下文模型落地的核心瓶颈。如何在几乎不损失模型质量的前提下降低注意力的渐近复杂度，是当前高效 Transformer 研究的主线之一。</p>
+            <p>既有工作大致沿两条路径展开：一类以固定稀疏模式近似全注意力，如局部滑动窗口与全局令牌相结合的 Longformer<span class="cite" data-cite="3">[3]</span>；另一类则从系统层面优化精确注意力的 IO 开销，如 FlashAttention<span class="cite" data-cite="4">[4]</span>。<mark class="hl" data-note="n1">前者常因稀疏模式与内容无关而损失检索能力，后者虽高效却并未降低渐近复杂度。</mark><span class="anchor-idx">1</span>本文观察到：注意力的稀疏结构本质上应当是<em>内容依赖</em>的——正如<span class="term" data-term="moe">混合专家模型</span>中路由器为每个令牌选择专家，查询亦应自主选择其最应关注的键值子集。</p>
+            <p>据此，我们提出稀疏路由注意力（SRA），其主要贡献包括：（i）一种可微分的 Top-k 键值块路由机制，使注意力稀疏模式随输入动态变化；（ii）面向路由训练稳定性的负载均衡正则；（iii）在 128K 上下文上的系统评测，<mark class="hl" data-note="n2">验证了 SRA 在质量—效率权衡面上对既有稀疏基线的帕累托改进</mark><span class="anchor-idx">2</span>。</p>
+          </section>
+
+          <section>
+            <h2 id="s2"><span class="no">02</span>相关工作</h2>
+            <p>高效注意力的研究可粗分为三类。<strong>固定模式稀疏化</strong>预设与内容无关的稀疏结构：稀疏 Transformer 采用分解的局部—跨步模式，Longformer<span class="cite" data-cite="3">[3]</span>结合滑窗与任务驱动的全局令牌。<strong>低秩与核方法近似</strong>以线性复杂度逼近注意力矩阵，但在精确检索类任务上往往出现明显的能力回退。<strong>系统级优化</strong>中，FlashAttention<span class="cite" data-cite="4">[4]</span>通过分块重算将精确注意力的显存占用降至线性，已成为训练的事实标准，但其计算量仍随序列二次增长。</p>
+            <p>与本文最接近的是基于聚类或哈希的内容感知稀疏注意力，以及<span class="term" data-term="moe">混合专家模型</span>中的条件计算思想<span class="cite" data-cite="2">[2]</span>。SRA 的不同之处在于将路由单位从「单令牌对单专家」推广为「查询对键值块」，并引入块级负载均衡以适配注意力的因果掩码结构。</p>
+          </section>
+
+          <section>
+            <h2 id="s3"><span class="no">03</span>方法：稀疏路由注意力</h2>
+            <h3 id="s3-1">3.1 Top-k 令牌路由</h3>
+            <p>给定查询序列 Q 与分块后的键值序列，SRA 首先以每个键值块的均值池化向量作为块摘要。路由器为轻量级线性层，计算查询 q<sub>i</sub> 对各块摘要的亲和度得分，并仅保留得分最高的 k 个块参与后续精确注意力计算。形式化地，查询 i 的注意力输出为：</p>
+            <div class="eq">
+              <div class="math">
+                o<sub>i</sub> = <span style="font-style:normal">∑</span><sub>j∈𝒯<sub>k</sub>(i)</sub>
+                <span class="op">softmax</span>( q<sub>i</sub>k<sub>j</sub><sup>⊤</sup> / √d ) · v<sub>j</sub>,
+                &nbsp;&nbsp;
+                𝒯<sub>k</sub>(i) = <span class="op">Top-k</span><sub>b</sub> ( W<sub>r</sub> q<sub>i</sub> · s<sub>b</sub> )
+              </div>
+              <div class="eqno">(1)</div>
+            </div>
+            <p>其中 s<sub>b</sub> 为第 b 个键值块的摘要向量，W<sub>r</sub> 为路由投影矩阵。<mark class="hl" data-note="n3">直觉上，路由器扮演着「目录检索员」的角色：先翻阅各章节的摘要，再决定精读哪几章</mark><span class="anchor-idx">3</span>，从而将每个查询的注意力开销从 O(L) 压缩至 O(k·B)，其中 B 为块大小。</p>
+            <h3 id="s3-2">3.2 路由正则与负载均衡</h3>
+            <p>朴素 Top-k 路由易出现「赢者通吃」现象：少数块被过度路由，其余块因缺乏梯度而退化。受 Switch Transformer<span class="cite" data-cite="2">[2]</span> 启发，我们引入块级负载均衡损失，鼓励路由分布在批维度上接近均匀；同时在路由 logits 上注入小幅探索噪声，缓解训练早期的路由坍缩。二者合计仅引入约 0.4% 的额外训练开销。</p>
+          </section>
+
+          <section>
+            <h2 id="s4"><span class="no">04</span>实验</h2>
+            <p>我们在 1.3B 参数规模、128K 训练上下文的主设置下评测 SRA，并与全注意力（FlashAttention-2 实现）、Longformer 及块状局部注意力基线对比。所有模型在相同数据与计算预算下训练。</p>
+            <figure>
+              <div class="fig-frame">
+                <div class="heatmap" id="heatmap"></div>
+                <div class="fig-legend">注意力路由概率 <span class="grad"></span> 0 → 1</div>
+              </div>
+              <figcaption><span class="fig-no">FIG. 1</span><span>SRA 第 12 层的路由热力图（24×24 键值块采样）。对角亮带显示模型学会关注邻近上下文，而 scattered 亮点对应跨长程的检索性路由——这正是固定模式稀疏难以捕获的结构。</span></figcaption>
+            </figure>
+            <h3 id="s4-1">4.1 长文基准结果</h3>
+            <table>
+              <caption><span class="fig-no">TABLE 1</span><span>128K 上下文语言建模与检索评测。PPL 越低越好；NIAH 为「大海捞针」准确率（%）。</span></caption>
+              <thead><tr><th>方法</th><th>PG-19 PPL ↓</th><th>NIAH ↑</th><th>吞吐 (tok/s) ↑</th><th>显存 (GB) ↓</th></tr></thead>
+              <tbody>
+                <tr><td>全注意力 (FA-2)</td><td>11.42</td><td>99.1</td><td>4,820</td><td>38.6</td></tr>
+                <tr><td>Longformer</td><td>12.87</td><td>71.3</td><td>11,940</td><td>14.2</td></tr>
+                <tr><td>块状局部注意力</td><td>12.31</td><td>78.6</td><td>12,350</td><td>13.8</td></tr>
+                <tr><td>SRA（本文, k=4）</td><td class="best">11.53</td><td class="best">97.5</td><td class="best">14,910</td><td class="best">12.4</td></tr>
+              </tbody>
+              <tfoot><tr><td colspan="5">† 吞吐在单张 H800、batch=1、128K 上下文下测得。</td></tr></tfoot>
+            </table>
+            <p><mark class="hl" data-note="n4">SRA 以仅 0.11 的困惑度差距逼近全注意力，同时取得 3.1× 的推理吞吐提升；在 NIAH 检索上更是大幅超越两类稀疏基线逾 18 个百分点</mark><span class="anchor-idx">4</span>，印证了内容依赖稀疏模式对检索能力的关键作用。消融显示，k=4 在质量与效率间取得最佳平衡；进一步增大 k 收益递减。</p>
+          </section>
+
+          <section>
+            <h2 id="s5"><span class="no">05</span>结论与局限</h2>
+            <p>本文提出的稀疏路由注意力将混合专家模型的条件计算思想引入注意力稀疏化，在 128K 上下文上实现了质量与效率的帕累托改进。<mark class="hl" data-note="n5">需要指出，当前评测限于 1.3B 规模与语言建模任务；SRA 在更大规模模型及多模态场景下的表现，以及路由器在分布外数据上的稳健性，仍有待验证。</mark><span class="anchor-idx">5</span>代码与模型权重将于论文录用后开源。</p>
+          </section>
+
+          <section>
+            <h2 id="s6"><span class="no">06</span>参考文献</h2>
+            <ol class="refs">
+              <li>Vaswani A., et al. <em>Attention Is All You Need.</em> NeurIPS, 2017.</li>
+              <li>Fedus W., Zoph B., Shazeer N. <em>Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity.</em> JMLR, 2022.</li>
+              <li>Beltagy I., Peters M. E., Cohan A. <em>Longformer: The Long-Document Transformer.</em> arXiv:2004.05150, 2020.</li>
+              <li>Dao T., et al. <em>FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness.</em> NeurIPS, 2022.</li>
+              <li>Lewis P., et al. <em>Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks.</em> NeurIPS, 2020.</li>
+              <li>Jiang A. Q., et al. <em>Mixtral of Experts.</em> arXiv:2401.04088, 2024.</li>
+            </ol>
+          </section>
+        </div>
+
+        <!-- 旁注列（JS 绝对定位对齐锚点） -->
+        <div class="margin-col" id="marginCol">
+          <div class="margin-note rise d4" data-anchor="n1">
+            <div class="mn-tag t-explain"><i></i>解读<span class="idx">N.1</span></div>
+            一句话点题：固定稀疏「看不见内容」，系统优化「降不了复杂度」——本文恰好切入两者的空白地带。
+            <div class="mn-foot"><span class="ai-sig">砚读 AI</span><span>置信 96%</span></div>
+          </div>
+          <div class="margin-note rise d5" data-anchor="n2">
+            <div class="mn-tag t-link"><i></i>关联<span class="idx">N.2</span></div>
+            「帕累托改进」的声明将在 §4 表 1 兑现。可与 Mixtral<span style="font-family:var(--mono);font-size:10px">[6]</span> 的专家路由对照阅读：同属条件计算，粒度却从一「令牌—专家」变为「查询—块」。
+            <div class="mn-foot"><span class="ai-sig">砚读 AI</span><span>置信 91%</span></div>
+          </div>
+          <div class="margin-note rise d6" data-anchor="n3">
+            <div class="mn-tag t-explain"><i></i>解读<span class="idx">N.3</span></div>
+            公式 (1) 的巧思：路由只看「块摘要」而非全部键，故路由本身是 O(L/B) 的。摘要看错的风险由负载均衡正则兜底（§3.2）。
+            <div class="mn-foot"><span class="ai-sig">砚读 AI</span><span>置信 94%</span></div>
+          </div>
+          <div class="margin-note" data-anchor="n4">
+            <div class="mn-tag t-doubt"><i></i>质疑<span class="idx">N.4</span></div>
+            NIAH 是合成任务，对真实长文理解的代表性有限。建议追问作者：真实基准（如 ∞Bench）上优势是否保持？batch&gt;1 时 3.1× 加速是否缩水？
+            <div class="mn-foot"><span class="ai-sig">砚读 AI</span><span>批判性提示</span></div>
+          </div>
+          <div class="margin-note" data-anchor="n5">
+            <div class="mn-tag t-warn"><i></i>提醒<span class="idx">N.5</span></div>
+            作者坦承规模上限为 1.3B——引用本文结论时勿外推至前沿模型。开源承诺「录用后」，复现需耐心等待。
+            <div class="mn-foot"><span class="ai-sig">砚读 AI</span><span>复现注意</span></div>
+          </div>
+        </div>
+
+      </article>
+    </div>
+
+  </main>
+
+  <!-- ═══════ 右侧 AI 助手栏 ═══════ -->
+  <aside class="ai-side">
+    <div class="ai-head">
+      <div class="h-orb"></div>
+      <div>
+        <div class="h-t">砚读 AI 助手</div>
+        <div class="h-s">已读毕本文 · 在线</div>
+      </div>
+    </div>
+    <div class="ai-msgs" id="aiMsgs">
+      <div class="msg greet">
+        <div class="m-orb"></div>
+        <div class="m-body">你好，我是<em>砚读 AI</em>。已通读这篇关于稀疏路由注意力的论文，可以问我：核心贡献、公式直觉、实验可信度，或与相关工作的对比。</div>
+      </div>
+    </div>
+    <div class="ai-chips">
+      <button class="chip" data-q="一句话总结本文">✦ 一句话总结</button>
+      <button class="chip" data-q="解释公式 (1) 的直觉">✦ 公式 (1) 直觉</button>
+      <button class="chip" data-q="实验有哪些局限？">✦ 实验局限</button>
+      <button class="chip" data-q="与 RAG 有什么关系？">✦ 与 RAG 的关系</button>
+    </div>
+    <div class="ai-input">
+      <input id="aiInput" type="text" placeholder="提问本文的任何细节…" autocomplete="off">
+      <button class="send" id="aiSend" title="提问">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5m0 0l-6 6m6-6l6 6"/></svg>
+      </button>
+    </div>
+  </aside>
+</div>
+
+<!-- 浮层 -->
+<div class="pop" id="citePop">
+  <div class="pop-no" id="cpNo">REF [1]</div>
+  <h4 id="cpTitle"></h4>
+  <div class="pop-authors" id="cpAuthors"></div>
+  <div class="pop-sum"><b>AI 一句话</b><span id="cpSum"></span></div>
+  <div class="pop-foot"><button>加入引用</button><button>跳转原文</button></div>
+</div>
+<div class="pop term-pop" id="termPop">
+  <div class="t-word" id="tpWord"></div>
+  <div class="t-en" id="tpEn"></div>
+  <p id="tpDef"></p>
+</div>
+
+<div class="grain"></div>
+
+<script>
+/* ═══════════════ 数据 ═══════════════ */
+const CITES = {
+  1:{t:"Attention Is All You Need", a:"Vaswani, Shazeer, Parmar 等 · NeurIPS 2017", s:"Transformer 开山之作，确立自注意力为序列建模范式，也是本文一切讨论的起点。"},
+  2:{t:"Switch Transformers: Scaling to Trillion Parameter Models", a:"Fedus, Zoph, Shazeer · JMLR 2022", s:"以单专家路由将 MoE 推向万亿参数，其负载均衡损失被本文 §3.2 直接借鉴。"},
+  3:{t:"Longformer: The Long-Document Transformer", a:"Beltagy, Peters, Cohan · 2020", s:"滑窗+全局令牌的固定稀疏代表，本文表 1 中作为稀疏基线被超越。"},
+  4:{t:"FlashAttention: Fast and Memory-Efficient Exact Attention", a:"Dao, Fu, Ermon 等 · NeurIPS 2022", s:"IO 感知的精确注意力实现，不改变复杂度但重新定义了效率基线。"},
+  5:{t:"Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks", a:"Lewis, Perez, Piktus 等 · NeurIPS 2020", s:"RAG 奠基作；SRA 的「块摘要路由」与其「检索再精读」思想遥相呼应。"},
+  6:{t:"Mixtral of Experts", a:"Jiang, Sablayrolles, Roux 等 · 2024", s:"开放权重的稀疏 MoE 标杆，可与 SRA 的路由哲学对照阅读。"}
+};
+const TERMS = {
+  moe:{w:"混合专家模型", en:"Mixture-of-Experts (MoE)", d:"用可学习路由器把每个令牌分派给少数「专家」子网络的条件计算架构，以稀疏激活换取超大参数量下的恒定计算成本。"}
+};
+const ANSWERS = {
+  "一句话总结本文":"本文把 MoE 的「路由」思想搬进注意力：让每个查询只精读 Top-k 个最相关的键值块，在 128K 长文上以 3.1× 加速几乎无损地逼近全注意力质量。<br><span class='src'>依据 §1 摘要 · §4 表 1</span>",
+  "解释公式 (1) 的直觉":"可以把它想成查字典：路由器先用「块摘要」给整本书的每一章打分（很便宜），只留下分数最高的 k 章做逐字精读（精确注意力）。稀疏性来自「只读目录就敢跳过大部分章节」。<br><span class='src'>依据 §3.1 公式 (1)</span>",
+  "实验有哪些局限？":"三点值得留意：① 规模仅验证到 1.3B，未见 70B+ 证据；② NIAH 是合成检索任务，真实长文基准缺失；③ 吞吐在 batch=1 下测得，服务场景的高并发收益未知。作者在 §5 也坦承了前两点。<br><span class='src'>依据 §4 · §5</span>",
+  "与 RAG 有什么关系？":"思想同构：RAG 在「语料库」尺度先检索再精读<span style='font-family:var(--mono);font-size:10px'>[5]</span>，SRA 在「单序列内部」做同样的事——块摘要即索引，Top-k 路由即检索。可以说 SRA 是把 RAG 折叠进了注意力层。<br><span class='src'>依据 §3.1 · 文献 [5]</span>"
+};
+
+/* ═══════════════ 元素 ═══════════════ */
+const scroller = document.getElementById('scroller');
+const paper    = document.getElementById('paper');
+const marginCol= document.getElementById('marginCol');
+const notes    = [...document.querySelectorAll('.margin-note')];
+const hls      = [...document.querySelectorAll('.hl')];
+const tocItems = [...document.querySelectorAll('#toc li')];
+const tocDot   = document.getElementById('tocDot');
+const tocFill  = document.getElementById('tocFill');
+const hairFill = document.getElementById('hairFill');
+const ringFg   = document.getElementById('ringFg');
+const pctBig   = document.getElementById('pctBig');
+const RING_C   = 138.2;
+
+/* ═══════════════ 旁注定位 ═══════════════ */
+function positionNotes(){
+  const colTop = marginCol.offsetTop;
+  notes.forEach(n=>{
+    const anchor = paper.querySelector(`.hl[data-note="${n.dataset.anchor}"]`);
+    if(!anchor) return;
+    const aTop = anchor.offsetTop + anchor.offsetHeight/2;
+    n.style.top = (aTop - colTop - 18) + 'px';
+  });
+  // 防重叠：自上而下推挤
+  const sorted = notes.slice().sort((a,b)=>parseFloat(a.style.top)-parseFloat(b.style.top));
+  for(let i=1;i<sorted.length;i++){
+    const prev = sorted[i-1], cur = sorted[i];
+    const minTop = parseFloat(prev.style.top) + prev.offsetHeight + 16;
+    if(parseFloat(cur.style.top) < minTop) cur.style.top = minTop + 'px';
+  }
+}
+window.addEventListener('load', positionNotes);
+window.addEventListener('resize', positionNotes);
+if(document.fonts && document.fonts.ready) document.fonts.ready.then(positionNotes);
+setTimeout(positionNotes, 600);
+
+/* ═══════════════ 双向联动：高亮 ↔ 旁注 ═══════════════ */
+hls.forEach(h=>{
+  const note = notes.find(n=>n.dataset.anchor===h.dataset.note);
+  if(!note) return;
+  h.addEventListener('mouseenter', ()=> note.classList.add('lit'));
+  h.addEventListener('mouseleave', ()=> note.classList.remove('lit'));
+  note.addEventListener('mouseenter', ()=> h.classList.add('lit'));
+  note.addEventListener('mouseleave', ()=> h.classList.remove('lit'));
+  note.addEventListener('click', ()=>{
+    scroller.scrollTo({top: h.offsetTop - 160, behavior:'smooth'});
+    h.classList.add('lit'); setTimeout(()=>h.classList.remove('lit'), 1200);
+  });
+});
+
+/* ═══════════════ 滚动：进度 / 目录高亮 / 脊线 ═══════════════ */
+const secs = tocItems.map(li=>{
+  const a = li.querySelector('a'); const el = document.getElementById(a.dataset.sec);
+  return {li, el};
+}).filter(s=>s.el);
+
+function onScroll(){
+  const max = scroller.scrollHeight - scroller.clientHeight;
+  const p = max>0 ? Math.min(1, scroller.scrollTop/max) : 0;
+  // 顶栏发丝 + 圆环 + 百分比
+  hairFill.style.width = (p*100)+'%';
+  ringFg.style.strokeDashoffset = RING_C * (1-p);
+  pctBig.textContent = Math.round(p*100)+'%';
+  // 当前小节
+  let cur = secs[0];
+  secs.forEach(s=>{ if(s.el.offsetTop - 140 <= scroller.scrollTop) cur = s; });
+  tocItems.forEach(li=>li.classList.remove('active'));
+  if(cur) cur.li.classList.add('active');
+  // 脊线游标 & 填充
+  const toc = document.getElementById('toc');
+  const idx = secs.indexOf(cur);
+  const liEl = cur ? cur.li : null;
+  if(liEl){
+    const y = liEl.offsetTop + 16;
+    tocDot.style.top = y + 'px';
+    tocFill.style.height = (y - 6) + 'px';
+  }
+}
+scroller.addEventListener('scroll', onScroll, {passive:true});
+tocItems.forEach(li=>{
+  li.querySelector('a').addEventListener('click', ()=>{
+    const el = document.getElementById(li.querySelector('a').dataset.sec);
+    if(el) scroller.scrollTo({top: el.offsetTop - 76, behavior:'smooth'});
+  });
+});
+onScroll();
+
+/* ═══════════════ 悬浮：引用卡 / 术语签 ═══════════════ */
+function bindPop(triggerSel, pop, fill){
+  let hideT;
+  document.querySelectorAll(triggerSel).forEach(el=>{
+    el.addEventListener('mouseenter', ()=>{
+      clearTimeout(hideT);
+      fill(el);
+      const r = el.getBoundingClientRect();
+      pop.style.left = Math.min(window.innerWidth - 320, Math.max(12, r.left - 40)) + 'px';
+      pop.style.top  = (r.bottom + 10) + 'px';
+      // 防底部溢出
+      requestAnimationFrame(()=>{
+        const pr = pop.getBoundingClientRect();
+        if(pr.bottom > window.innerHeight - 12)
+          pop.style.top = (r.top - pr.height - 10) + 'px';
+      });
+      pop.classList.add('show');
+    });
+    el.addEventListener('mouseleave', ()=>{ hideT = setTimeout(()=>pop.classList.remove('show'), 180); });
+  });
+  pop.addEventListener('mouseenter', ()=>clearTimeout(hideT));
+  pop.addEventListener('mouseleave', ()=>pop.classList.remove('show'));
+}
+const citePop = document.getElementById('citePop');
+bindPop('.cite', citePop, el=>{
+  const d = CITES[el.dataset.cite]; if(!d) return;
+  document.getElementById('cpNo').textContent = 'REF ['+el.dataset.cite+']';
+  document.getElementById('cpTitle').textContent = d.t;
+  document.getElementById('cpAuthors').textContent = d.a;
+  document.getElementById('cpSum').textContent = d.s;
+});
+const termPop = document.getElementById('termPop');
+bindPop('.term', termPop, el=>{
+  const d = TERMS[el.dataset.term]; if(!d) return;
+  document.getElementById('tpWord').textContent = d.w;
+  document.getElementById('tpEn').textContent = d.en;
+  document.getElementById('tpDef').textContent = d.d;
+});
+
+/* ═══════════════ 主题 / 沉浸 ═══════════════ */
+document.getElementById('themeBtn').addEventListener('click', e=>{
+  document.body.classList.toggle('night');
+  e.currentTarget.classList.toggle('on');
+  e.currentTarget.lastChild.textContent.trim();
+  e.currentTarget.childNodes[2].textContent = document.body.classList.contains('night') ? ' 晨读' : ' 夜读';
+  positionNotes();
+});
+document.getElementById('focusBtn').addEventListener('click', e=>{
+  document.body.classList.toggle('focus');
+  e.currentTarget.classList.toggle('on');
+  setTimeout(positionNotes, 550);
+});
+
+/* ═══════════════ 热力图生成 ═══════════════ */
+(function(){
+  const hm = document.getElementById('heatmap');
+  const N = 24;
+  for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+    // 对角邻近 + 稀疏长程热点 + 噪声
+    let v = Math.exp(-Math.abs(r-c)/1.8)*0.9;
+    if((r*7+c*13)%29===0) v = Math.max(v, .55+((r+c)%5)/12);
+    v += ((r*31+c*17)%97)/97 * .12;
+    v = Math.min(1, v);
+    const i = document.createElement('i');
+    i.style.background = `color-mix(in srgb, var(--accent) ${Math.round(v*100)}%, var(--paper-3))`;
+    hm.appendChild(i);
+  }
+})();
+
+/* ═══════════════ AI 右栏入口 ═══════════════ */
+const aiInput  = document.getElementById('aiInput');
+const aiMsgs   = document.getElementById('aiMsgs');
+
+function openAi(){
+  if(document.body.classList.contains('focus')){
+    document.body.classList.remove('focus');
+    document.getElementById('focusBtn').classList.remove('on');
+    setTimeout(positionNotes, 550);
+  }
+  setTimeout(()=>aiInput.focus(), 120);
+}
+document.getElementById('railAi').addEventListener('click', openAi);
+
+/* ═══════════════ AI 助手（右栏） ═══════════════ */
+function scrollMsgs(){ aiMsgs.scrollTop = aiMsgs.scrollHeight; }
+
+function ask(q){
+  // 用户气泡
+  const u = document.createElement('div');
+  u.className = 'msg user';
+  u.innerHTML = `<div class="m-body"></div>`;
+  u.querySelector('.m-body').textContent = q;
+  aiMsgs.appendChild(u);
+  scrollMsgs();
+  // AI 打字机回复
+  const a = ANSWERS[q] || `这是一个值得深挖的问题。基于本文内容：SRA 的核心是「内容依赖的稀疏」，你提到的「${q}」可以结合 §3 的路由机制与 §4 的实验证据来审视——建议先读旁注 N.3 建立直觉，再回到原段落细读。<br><span class='src'>依据全文语义检索</span>`;
+  const m = document.createElement('div');
+  m.className = 'msg';
+  m.innerHTML = `<div class="m-orb"></div><div class="m-body"><span class="txt"></span><span class="cursor"></span></div>`;
+  aiMsgs.appendChild(m);
+  scrollMsgs();
+  const txt = m.querySelector('.txt');
+  let i = 0;
+  (function type(){
+    if(i >= a.length){ m.querySelector('.cursor').remove(); return; }
+    if(a[i] === '<'){                       // 标签整段跳，保证 HTML 完整
+      const j = a.indexOf('>', i);
+      txt.innerHTML += a.slice(i, j+1); i = j+1;
+    } else {
+      txt.innerHTML += a[i++];
+    }
+    scrollMsgs();
+    setTimeout(type, 14);
+  })();
+  aiInput.value='';
+}
+document.getElementById('aiSend').addEventListener('click', ()=>{
+  const q = aiInput.value.trim(); if(q) ask(q);
+});
+aiInput.addEventListener('keydown', e=>{
+  if(e.key==='Enter' && aiInput.value.trim()) ask(aiInput.value.trim());
+});
+document.querySelectorAll('.chip').forEach(c=> c.addEventListener('click', ()=>ask(c.dataset.q)));
+document.addEventListener('keydown', e=>{
+  if((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==='k'){
+    e.preventDefault();
+    openAi();
+  }
+});
+</script>
+</body>
+</html>

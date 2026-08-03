@@ -1,0 +1,34 @@
+{
+  "name": "inkreader",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Windows desktop paper reader with PDF, Markdown, annotations, translation, and an AI research assistant.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "desktop": "python app.py",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "dompurify": "^3.2.6",
+    "html2canvas": "^1.4.1",
+    "katex": "^0.17.0",
+    "lucide-react": "^0.468.0",
+    "marked": "^18.0.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.3"
+  }
+}
