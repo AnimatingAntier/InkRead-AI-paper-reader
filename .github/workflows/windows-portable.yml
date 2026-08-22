@@ -1,0 +1,56 @@
+name: Windows portable
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: Inkreader-GitHub
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: Inkreader-GitHub/package-lock.json
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements.txt pyinstaller
+      - name: Build frontend
+        run: |
+          npm ci
+          npm run build
+      - name: Generate icon
+        run: python scripts/make_icon.py
+      - name: Build portable app
+        run: python -m PyInstaller --noconfirm --distpath release --workpath build InkRead.spec
+      - name: Zip and upload to Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_EVENT_NAME -eq "release" -or $env:GITHUB_REF_TYPE -eq "tag") {
+            $tag = $env:GITHUB_REF_NAME
+          } else {
+            $tag = "v1.0.0"
+          }
+          $ver = $tag.TrimStart("v")
+          $name = "InkRead-$ver-windows-x64.zip"
+          if (-not (Test-Path "release/InkRead/InkRead.exe")) {
+            throw "InkRead.exe was not produced"
+          }
+          Compress-Archive -Path "release/InkRead" -DestinationPath $name -Force
+          gh release upload $tag $name --repo $env:GITHUB_REPOSITORY --clobber
