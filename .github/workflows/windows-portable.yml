@@ -4,6 +4,10 @@ on:
   workflow_dispatch:
   release:
     types: [published]
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/windows-portable.yml"
 
 permissions:
   contents: write
@@ -16,6 +20,21 @@ jobs:
         working-directory: Inkreader-GitHub
     steps:
       - uses: actions/checkout@v4
+      - name: Ensure GitHub Release exists
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $tag = "v1.1.0"
+          if ($env:GITHUB_EVENT_NAME -eq "release") {
+            $tag = $env:GITHUB_REF_NAME
+          }
+          gh release view $tag --repo $env:GITHUB_REPOSITORY 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            $notes = Join-Path $env:GITHUB_WORKSPACE ".github/RELEASE_NOTES_v1.1.0.md"
+            gh release create $tag --title "InkRead $tag" --target $env:GITHUB_SHA --repo $env:GITHUB_REPOSITORY --notes-file $notes
+          }
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -39,10 +58,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
+          $tag = "v1.1.0"
           if ($env:GITHUB_EVENT_NAME -eq "release") {
             $tag = $env:GITHUB_REF_NAME
-          } else {
-            $tag = "v1.1.0"
           }
           $ver = $tag.TrimStart("v")
           $name = "InkRead-$ver-windows-x64.zip"
