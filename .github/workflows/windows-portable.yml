@@ -4,9 +4,6 @@ on:
   workflow_dispatch:
   release:
     types: [published]
-  push:
-    tags:
-      - "v*"
 
 permissions:
   contents: write
@@ -42,10 +39,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
-          if ($env:GITHUB_EVENT_NAME -eq "release" -or $env:GITHUB_REF_TYPE -eq "tag") {
+          if ($env:GITHUB_EVENT_NAME -eq "release") {
             $tag = $env:GITHUB_REF_NAME
           } else {
-            $tag = "v1.0.0"
+            $tag = "v1.1.0"
           }
           $ver = $tag.TrimStart("v")
           $name = "InkRead-$ver-windows-x64.zip"
