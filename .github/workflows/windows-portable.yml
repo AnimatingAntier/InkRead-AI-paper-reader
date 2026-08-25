@@ -13,28 +13,40 @@ permissions:
   contents: write
 
 jobs:
+  ensure-release:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: tag
+        name: Create GitHub Release if missing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=v1.1.0
+          if [ "${GITHUB_EVENT_NAME}" = "release" ]; then
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "$TAG already exists"
+          else
+            gh release create "$TAG" \
+              --title "InkRead ${TAG}" \
+              --target "${GITHUB_SHA}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --notes-file .github/RELEASE_NOTES_v1.1.0.md
+          fi
+
   build:
+    needs: ensure-release
     runs-on: windows-latest
     defaults:
       run:
         working-directory: Inkreader-GitHub
     steps:
       - uses: actions/checkout@v4
-      - name: Ensure GitHub Release exists
-        working-directory: .
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: pwsh
-        run: |
-          $tag = "v1.1.0"
-          if ($env:GITHUB_EVENT_NAME -eq "release") {
-            $tag = $env:GITHUB_REF_NAME
-          }
-          gh release view $tag --repo $env:GITHUB_REPOSITORY 2>$null
-          if ($LASTEXITCODE -ne 0) {
-            $notes = Join-Path $env:GITHUB_WORKSPACE ".github/RELEASE_NOTES_v1.1.0.md"
-            gh release create $tag --title "InkRead $tag" --target $env:GITHUB_SHA --repo $env:GITHUB_REPOSITORY --notes-file $notes
-          }
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -56,12 +68,12 @@ jobs:
       - name: Zip and upload to Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.ensure-release.outputs.tag }}
         shell: pwsh
         run: |
-          $tag = "v1.1.0"
-          if ($env:GITHUB_EVENT_NAME -eq "release") {
-            $tag = $env:GITHUB_REF_NAME
-          }
+          $ErrorActionPreference = "Stop"
+          $tag = $env:RELEASE_TAG
+          if (-not $tag) { $tag = "v1.1.0" }
           $ver = $tag.TrimStart("v")
           $name = "InkRead-$ver-windows-x64.zip"
           if (-not (Test-Path "release/InkRead/InkRead.exe")) {
