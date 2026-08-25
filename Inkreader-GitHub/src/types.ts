@@ -76,6 +76,29 @@ export interface ScreenshotAttachment {
   ocrText: string
 }
 
+export interface ProviderCatalogEntry {
+  id: string
+  name: string
+  base_url: string
+  key_url: string
+  api_style: 'chat_completions' | 'responses'
+  needs_base_url: boolean
+}
+
+export interface ProviderModel {
+  id: string
+  name: string
+}
+
+export interface ProviderSlot {
+  has_key: boolean
+  api_key: string
+  model: string
+  base_url: string
+  models: ProviderModel[]
+  models_updated_at: string
+}
+
 export interface AppSettings {
   provider: string
   api_key: string
@@ -89,6 +112,8 @@ export interface AppSettings {
   fact_check: boolean
   configured: boolean
   translation_configured: boolean
+  catalog?: ProviderCatalogEntry[]
+  providers?: Record<string, ProviderSlot>
 }
 
 export interface TranslationResult {
