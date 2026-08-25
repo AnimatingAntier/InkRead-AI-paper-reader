@@ -6,6 +6,8 @@ import type {
   LibraryDocument,
   OpenDocument,
   PdfAnnotations,
+  ProviderCatalogEntry,
+  ProviderSlot,
   TranslationResult,
   TranslationStatus,
   Verification,
@@ -99,6 +101,13 @@ export async function saveSettings(settings: Partial<AppSettings>): Promise<AppS
       body: JSON.stringify(settings),
     }),
   )
+}
+
+export async function getProviders(): Promise<{
+  catalog: ProviderCatalogEntry[]
+  providers: Record<string, ProviderSlot>
+}> {
+  return responseJson(await fetch(`${API_BASE}/providers`))
 }
 
 export async function translateText(text: string, signal?: AbortSignal): Promise<TranslationResult> {

@@ -23,6 +23,7 @@ from document_store import (
     update_progress,
 )
 import settings_store
+from provider_catalog import kick_model_refresh, public_catalog
 from translation_service import (
     reset_translation_status,
     translate_to_chinese,
@@ -32,7 +33,7 @@ from translation_service import (
 
 class InkReadHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
-    server_version = "InkRead/1.0"
+    server_version = "InkRead/1.1"
 
     def log_message(self, format: str, *args) -> None:
         return
@@ -101,7 +102,15 @@ class InkReadHandler(BaseHTTPRequestHandler):
             elif path == "/api/documents":
                 self.send_json({"documents": list_documents()})
             elif path == "/api/settings":
+                kick_model_refresh()
                 self.send_json(settings_store.public())
+            elif path == "/api/providers":
+                kick_model_refresh()
+                public = settings_store.public()
+                self.send_json({
+                    "catalog": public.get("catalog") or public_catalog(),
+                    "providers": public.get("providers") or {},
+                })
             elif path == "/api/translation/status":
                 query = urllib.parse.parse_qs(parsed.query)
                 force = (query.get("force") or ["0"])[0] == "1"
@@ -143,8 +152,12 @@ class InkReadHandler(BaseHTTPRequestHandler):
                     raise ValueError("缺少文件名")
                 self.send_json(import_bytes(filename, self.read_body()), 201)
             elif path == "/api/settings":
-                updated = settings_store.update(self.read_json())
+                body = self.read_json()
+                updated = settings_store.update(body)
                 reset_translation_status()
+                posted_key = body.get("api_key") if isinstance(body, dict) else None
+                if posted_key and not settings_store._is_mask(posted_key):
+                    kick_model_refresh()
                 self.send_json(updated)
             elif path == "/api/translate":
                 self.send_json(translate_to_chinese(str(self.read_json().get("text") or "")))
@@ -253,6 +266,7 @@ class InkReadHandler(BaseHTTPRequestHandler):
 
 
 def start_server(port: int = PORT) -> None:
+    kick_model_refresh()
     server = ThreadingHTTPServer(("127.0.0.1", port), InkReadHandler)
     server.daemon_threads = True
     server.serve_forever()
