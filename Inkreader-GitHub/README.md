@@ -58,13 +58,13 @@ python app.py
 - 同一选区译文采用会话级缓存；切换侧栏后再次查看不会重复消耗百度翻译额度
 - 论文阅读区框选截图，可预览后随问题发送给 AI；支持 PDF、Markdown、公式、图表和现有标注
 - 多模态模型直接接收截图；文本模型自动调用 Windows 本机 OCR，并以论文文字层作为离线兜底
-- AI 设置内置 60 个 OpenCode Zen 模型下拉列表，按模型家族分组并同时显示名称与模型 ID
+- AI 设置按供应商选择并粘贴 API Key；已配置供应商的模型列表会在启动时自动刷新，内置目录仅作缓存为空时的后备
 - PDF 与 Markdown 通用遮挡卡：可拖动、八方向缩放，并能在不透明复习和透明查看模式间即时切换
 - 文档独立命名空间检索，避免多篇论文上下文串库
 - 调度中枢、长上下文、网络检索、事实校验四类 Agent 的可视化协作轨迹
 - 论文原文 `[P#]` 与网络来源 `[W#]` 强制隔离
 - Semantic Scholar、Crossref 与 Google Scholar / SerpApi 学术检索
-- OpenRouter、OpenAI 兼容 Chat Completions、OpenCode Zen Responses 接口
+- 内置 OpenRouter、OpenAI、OpenCode Zen、DeepSeek、Moonshot、阿里云百炼、智谱、SiliconFlow、Groq、xAI、Gemini 与自定义 OpenAI 兼容接口；各供应商密钥独立保存
 - AI 流式输出、来源抽屉、引用覆盖检查和低置信度提示
 - AI 生成期间发送按钮自动切换为暂停按钮，可立即中断请求并保留已经生成的回答、来源和 Agent 轨迹
 - 自动识别“最近、近期、SOTA、优于”等需要联网的问题
@@ -103,22 +103,23 @@ AI 会在每篇论文的独立命名空间中检索，减少不同论文内容�
 
 ## AI 设置
 
-打开左侧齿轮，在“AI 与检索设置”中填写：
+打开左侧齿轮，在“AI、检索与翻译设置”中：
 
-- 服务提供商
-- Base URL
-- 模型（从 60 个分组下拉选项中选择；旧版自定义模型仍会保留）
-- AI API Key
+- 选择供应商，然后粘贴该供应商的 API Key。目录内供应商无需填写 Base URL。
+- 各供应商的密钥与上次使用的模型独立保存；切换供应商会自动恢复，不必重新输入。
+- 若尚未填写 Key，设置页会提示并给出该供应商的官方申请链接。
+- 自定义 OpenAI 兼容接口仍需填写 Base URL（例如 `https://api.example.com/v1`）和 Key。
+- 模型下拉优先使用该供应商最近一次成功拉取的列表；启动时会在后台刷新所有已配置供应商的模型，超时不阻塞界面。内置目录仅在缓存为空时作为后备。
 - SerpApi API Key（可选，用于 Google Scholar 检索）
 - 百度翻译 APP ID 与 API Key（可选；不填写时直接使用本地英译中）
 
-未填写 AI Key 时，检索 Agent 与本地事实校验仍可运行，并展示命中的原文片段；填写后会生成完整综合回答。
+未填写当前供应商的 AI Key 时，检索 Agent 与本地事实校验仍可运行，并展示命中的原文片段；填写后会生成完整综合回答。
 
-当前已支持的接口形式：
+当前已支持的供应商：
 
-- OpenCode Zen Responses API
-- OpenRouter
-- OpenAI 兼容 Chat Completions API
+- OpenRouter、OpenAI、DeepSeek、Moonshot / Kimi、阿里云百炼 / Qwen、智谱 GLM、SiliconFlow、Groq、xAI Grok、Google Gemini
+- OpenCode Zen（Responses API）
+- 自定义 OpenAI 兼容 Chat Completions
 
 设置和密钥只保存在本机 `%LOCALAPPDATA%\InkRead\settings.json`。调用 AI 时，问题和相关论文片段会发送给所配置的 AI 服务。
 
