@@ -310,7 +310,7 @@ def generate_margin_comment(document_id: str, selected_text: str) -> str:
         },
         {
             "role": "user",
-            "content": f"论文《{title}》\n\n选中的原文：\n{selected}",
+            "content": f"论文：《{title}》\n\n选中的原文：\n{selected}",
         },
     ]
     content = "".join(_openai_stream(messages)).strip()
@@ -404,7 +404,7 @@ def _local_answer(
     for index, source in enumerate(top, 1):
         excerpt = re.sub(r"\s+", " ", source.get("content", "")).strip()[:420]
         lines.append(
-            f"- **{source.get('section', '原文')}**：{excerpt}… [P{index}]"
+            f"- **{source.get('section', '原文')}：**{excerpt}… [P{index}]"
         )
     if not configured:
         lines.extend([
