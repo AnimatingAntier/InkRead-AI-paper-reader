@@ -404,7 +404,7 @@ def _local_answer(
     for index, source in enumerate(top, 1):
         excerpt = re.sub(r"\s+", " ", source.get("content", "")).strip()[:420]
         lines.append(
-            f"- **{source.get('section', '原文')}：**{excerpt}… [P{index}]"
+            f"- **{source.get('section', '原文')}**：{excerpt}… [P{index}]"
         )
     if not configured:
         lines.extend([
