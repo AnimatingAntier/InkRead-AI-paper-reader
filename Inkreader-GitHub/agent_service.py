@@ -45,7 +45,7 @@ def _classify(question: str, document_ids: list[str]) -> dict:
 def _definition_term(question: str) -> str:
     cleaned = question.strip().strip("？?")
     chinese = re.match(
-        r"^[\u201c\"']?(.{2,80}?)[\u201d\"']?\s*(?:是什么|是什么意思|什么意思|指什么|的含义(?:是什么)?)$",
+        r"^[“\"']?(.{2,80}?)[”\"']?\s*(?:是什么|是什么意思|什么意思|指什么|的含义(?:是什么)?)$",
         cleaned,
         flags=re.IGNORECASE,
     )
@@ -195,11 +195,12 @@ def _openai_stream(messages: list[dict]) -> Generator[str, None, str]:
     provider = settings.get("provider")
     is_responses = _zen_uses_responses(str(provider or ""), base_url, str(model or ""))
     api_messages = _prepare_api_messages(messages, is_responses)
+    zen = str(provider or "") == "opencode_zen" or str(base_url).rstrip("/").endswith("/zen/v1")
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "Accept": "text/event-stream",
-        "User-Agent": "InkRead/1.0",
+        "User-Agent": "opencode/1.18.16" if zen else "InkRead/1.0",
         "HTTP-Referer": "http://127.0.0.1:3217",
         "X-Title": "InkRead",
     }
@@ -229,7 +230,22 @@ def _openai_stream(messages: list[dict]) -> Generator[str, None, str]:
     emitted_text = False
     completed_text = ""
     terminal_error = ""
-    with urllib.request.urlopen(request, timeout=180) as response:
+    try:
+        response_ctx = urllib.request.urlopen(request, timeout=180)
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")[:400]
+        detail = raw
+        try:
+            parsed = json.loads(raw)
+            err = parsed.get("error") if isinstance(parsed, dict) else None
+            if isinstance(err, dict):
+                detail = err.get("message") or err.get("type") or raw
+            elif isinstance(parsed, dict) and parsed.get("message"):
+                detail = parsed.get("message")
+        except json.JSONDecodeError:
+            pass
+        raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
+    with response_ctx as response:
         for raw in response:
             line = raw.decode("utf-8", errors="replace").strip()
             if not line.startswith("data:"):
@@ -294,12 +310,12 @@ def generate_margin_comment(document_id: str, selected_text: str) -> str:
         },
         {
             "role": "user",
-            "content": f"论文《{title}》\n\n选中的原文：\n{selected}",
+            "content": f"论文：《{title}》\n\n选中的原文：\n{selected}",
         },
     ]
     content = "".join(_openai_stream(messages)).strip()
     content = re.sub(r"^\s*(?:#+\s*)?(?:批注|注释)[:：]?\s*", "", content)
-    content = content.strip(" \n\t\"'\u201c\u201d")
+    content = content.strip(" \n\t\"'“”")
     if not content:
         raise RuntimeError("AI 未生成批注内容")
     return content[:1200]
@@ -388,7 +404,7 @@ def _local_answer(
     for index, source in enumerate(top, 1):
         excerpt = re.sub(r"\s+", " ", source.get("content", "")).strip()[:420]
         lines.append(
-            f"- **{source.get('section', '原文')}**：{excerpt}… [P{index}]"
+            f"- **{source.get('section', '原文')}：**{excerpt}… [P{index}]"
         )
     if not configured:
         lines.extend([
