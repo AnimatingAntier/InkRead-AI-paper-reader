@@ -13,9 +13,13 @@ class FakeResponse:
             f"data: {json.dumps(event, ensure_ascii=False)}\n".encode("utf-8")
             for event in events
         ]
+        self.headers = {"Content-Type": "text/event-stream"}
+
+    def __iter__(self):
+        return iter(self.lines)
 
     def __enter__(self):
-        return iter(self.lines)
+        return self
 
     def __exit__(self, exc_type, exc, traceback):
         return False
@@ -51,14 +55,13 @@ class AgentServiceTests(unittest.TestCase):
         }]
         settings = {
             "api_key": "test-key",
-            "base_url": "https://opencode.ai/zen/v1",
-            "model": "test-model",
-            "provider": "opencode_zen",
+            "model": "gpt-5.6-luna",
+            "provider": "opencode_go",
         }
 
         with (
             patch("agent_service.settings_store.load", return_value=settings),
-            patch("agent_service.urllib.request.urlopen", return_value=FakeResponse(events)),
+            patch("llm_client.urllib.request.urlopen", return_value=FakeResponse(events)),
         ):
             chunks = list(agent_service._openai_stream([{"role": "user", "content": "测试"}]))
 
@@ -71,14 +74,13 @@ class AgentServiceTests(unittest.TestCase):
         }]
         settings = {
             "api_key": "test-key",
-            "base_url": "https://opencode.ai/zen/v1",
-            "model": "test-model",
-            "provider": "opencode_zen",
+            "model": "gpt-5.6-luna",
+            "provider": "opencode_go",
         }
 
         with (
             patch("agent_service.settings_store.load", return_value=settings),
-            patch("agent_service.urllib.request.urlopen", return_value=FakeResponse(events)),
+            patch("llm_client.urllib.request.urlopen", return_value=FakeResponse(events)),
         ):
             with self.assertRaisesRegex(RuntimeError, "空响应"):
                 list(agent_service._openai_stream([{"role": "user", "content": "测试"}]))

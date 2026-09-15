@@ -24,7 +24,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG=v1.1.0
+          TAG=v1.2.0
           if [ "${GITHUB_EVENT_NAME}" = "release" ]; then
             TAG="${GITHUB_REF_NAME}"
           fi
@@ -32,11 +32,20 @@ jobs:
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "$TAG already exists"
           else
-            gh release create "$TAG" \
-              --title "InkRead ${TAG}" \
-              --target "${GITHUB_SHA}" \
-              --repo "$GITHUB_REPOSITORY" \
-              --notes-file .github/RELEASE_NOTES_v1.1.0.md
+            NOTES=".github/RELEASE_NOTES_${TAG}.md"
+            if [ -f "$NOTES" ]; then
+              gh release create "$TAG" \
+                --title "InkRead ${TAG}" \
+                --target "${GITHUB_SHA}" \
+                --repo "$GITHUB_REPOSITORY" \
+                --notes-file "$NOTES"
+            else
+              gh release create "$TAG" \
+                --title "InkRead ${TAG}" \
+                --target "${GITHUB_SHA}" \
+                --repo "$GITHUB_REPOSITORY" \
+                --generate-notes
+            fi
           fi
 
   build:
@@ -73,7 +82,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $tag = $env:RELEASE_TAG
-          if (-not $tag) { $tag = "v1.1.0" }
+          if (-not $tag) { $tag = "v1.2.0" }
           $ver = $tag.TrimStart("v")
           $name = "InkRead-$ver-windows-x64.zip"
           if (-not (Test-Path "release/InkRead/InkRead.exe")) {

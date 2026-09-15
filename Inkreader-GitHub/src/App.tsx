@@ -32,7 +32,7 @@ import { MarkdownReader } from './components/MarkdownReader'
 import { MaskCard } from './components/MaskCard'
 import { PdfReader } from './components/PdfReader'
 import { ScreenshotOverlay } from './components/ScreenshotOverlay'
-import { SettingsModal } from './components/SettingsModal'
+import { SettingsPage } from './components/SettingsPage'
 import { TranslationPanel } from './components/TranslationPanel'
 import type { LibraryDocument, OpenDocument, ScreenshotAttachment } from './types'
 
@@ -580,7 +580,7 @@ export default function App() {
         onClearScreenshot={() => setScreenshotAttachment(null)}
       />
 
-      <SettingsModal
+      <SettingsPage
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         onSaved={(settings) => setCommentIdleOpacity(settings.comment_idle_opacity)}

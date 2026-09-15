@@ -1,0 +1,43 @@
+# Dependencies and generated frontend
+node_modules/
+dist/
+
+# PyInstaller and local release output
+build*/
+release*/
+*.zip
+
+# User library, settings, downloaded models, and temporary captures
+data/
+tmp/
+
+# Code-graph tooling output
+graphify-out/
+
+# Local secrets. Commit only the empty template.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+credentials*.json
+settings.json
+
+# Python, tests, and logs
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.lnk

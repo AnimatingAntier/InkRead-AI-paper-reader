@@ -1,13 +1,14 @@
 import type {
   AgentSource,
   AgentStatus,
+  AiTestResult,
   AppSettings,
   ChatMessage,
   LibraryDocument,
+  ModelCacheEntry,
   OpenDocument,
   PdfAnnotations,
-  ProviderCatalogEntry,
-  ProviderSlot,
+  ProviderCatalog,
   TranslationResult,
   TranslationStatus,
   Verification,
@@ -103,11 +104,36 @@ export async function saveSettings(settings: Partial<AppSettings>): Promise<AppS
   )
 }
 
-export async function getProviders(): Promise<{
-  catalog: ProviderCatalogEntry[]
-  providers: Record<string, ProviderSlot>
-}> {
-  return responseJson(await fetch(`${API_BASE}/providers`))
+export async function getProviders(): Promise<ProviderCatalog> {
+  return responseJson<ProviderCatalog>(await fetch(`${API_BASE}/providers`))
+}
+
+export async function listAiModels(
+  settings: Partial<AppSettings>,
+  signal?: AbortSignal,
+): Promise<ModelCacheEntry> {
+  return responseJson<ModelCacheEntry>(
+    await fetch(`${API_BASE}/ai/models`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+      signal,
+    }),
+  )
+}
+
+export async function testAiConnection(
+  settings: Partial<AppSettings>,
+  signal?: AbortSignal,
+): Promise<AiTestResult> {
+  return responseJson<AiTestResult>(
+    await fetch(`${API_BASE}/ai/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+      signal,
+    }),
+  )
 }
 
 export async function translateText(text: string, signal?: AbortSignal): Promise<TranslationResult> {

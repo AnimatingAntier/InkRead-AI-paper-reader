@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import json
 import re
 import urllib.error
-import urllib.request
 from collections.abc import Generator
 
+import llm_client
 import settings_store
 from document_store import get_document
 from ocr_service import clean_image_data_url, image_mode, windows_ocr
+from providers import model_vision
 from retrieval import retrieve, tokenize
 from search_agent import academic_search
 
@@ -136,157 +136,16 @@ def _system_prompt(
 """
 
 
-def _response_output_text(response: dict) -> str:
-    parts: list[str] = []
-    for item in response.get("output") or []:
-        if not isinstance(item, dict):
-            continue
-        for content in item.get("content") or []:
-            if not isinstance(content, dict):
-                continue
-            if content.get("type") in {"output_text", "text"}:
-                text = content.get("text")
-                if isinstance(text, str) and text:
-                    parts.append(text)
-    return "".join(parts)
-
-
-def _prepare_api_messages(messages: list[dict], is_responses: bool) -> list[dict]:
-    prepared: list[dict] = []
-    for message in messages:
-        item = {"role": message.get("role"), "content": message.get("content", "")}
-        image_data_url = str(message.get("image_data_url") or "")
-        if image_data_url and item["role"] == "user":
-            text = str(item["content"] or "请解读这张论文截图")
-            if is_responses:
-                item["content"] = [
-                    {"type": "input_text", "text": text},
-                    {"type": "input_image", "image_url": image_data_url},
-                ]
-            else:
-                item["content"] = [
-                    {"type": "text", "text": text},
-                    {"type": "image_url", "image_url": {"url": image_data_url}},
-                ]
-        prepared.append(item)
-    return prepared
-
-
-def _zen_uses_responses(provider: str, base_url: str, model: str) -> bool:
-    """OpenCode Zen routes by model: GPT/Grok/Muse Spark use /responses.
-
-    Free models such as mimo-v2.5-free, plus DeepSeek/GLM/Kimi/MiniMax,
-    use OpenAI-compatible /chat/completions per official Zen docs.
-    """
-    zen = provider == "opencode_zen" or str(base_url).rstrip("/").endswith("/zen/v1")
-    if not zen:
-        return False
-    mid = str(model or "").lower()
-    return mid.startswith(("gpt-", "grok-", "muse-spark"))
-
-
 def _openai_stream(messages: list[dict]) -> Generator[str, None, str]:
-    settings = settings_store.load()
-    api_key = settings.get("api_key", "")
-    if not api_key:
-        raise RuntimeError("尚未配置 AI API Key")
-    base_url = settings.get("base_url", "").rstrip("/")
-    model = settings.get("model") or "openrouter/free"
-    provider = settings.get("provider")
-    is_responses = _zen_uses_responses(str(provider or ""), base_url, str(model or ""))
-    api_messages = _prepare_api_messages(messages, is_responses)
-    zen = str(provider or "") == "opencode_zen" or str(base_url).rstrip("/").endswith("/zen/v1")
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "Accept": "text/event-stream",
-        "User-Agent": "opencode/1.18.16" if zen else "InkRead/1.0",
-        "HTTP-Referer": "http://127.0.0.1:3217",
-        "X-Title": "InkRead",
-    }
-    if is_responses:
-        url = base_url + "/responses"
-        payload = {
-            "model": model,
-            "input": api_messages,
-            "max_output_tokens": 3500,
-            "temperature": 0.35,
-            "stream": True,
-        }
-    else:
-        url = base_url + "/chat/completions"
-        payload = {
-            "model": model,
-            "messages": api_messages,
-            "max_tokens": 3500,
-            "temperature": 0.35,
-            "stream": True,
-        }
-    request = urllib.request.Request(
-        url,
-        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers=headers,
-    )
-    emitted_text = False
-    completed_text = ""
-    terminal_error = ""
-    try:
-        response_ctx = urllib.request.urlopen(request, timeout=180)
-    except urllib.error.HTTPError as exc:
-        raw = exc.read().decode("utf-8", errors="replace")[:400]
-        detail = raw
-        try:
-            parsed = json.loads(raw)
-            err = parsed.get("error") if isinstance(parsed, dict) else None
-            if isinstance(err, dict):
-                detail = err.get("message") or err.get("type") or raw
-            elif isinstance(parsed, dict) and parsed.get("message"):
-                detail = parsed.get("message")
-        except json.JSONDecodeError:
-            pass
-        raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
-    with response_ctx as response:
-        for raw in response:
-            line = raw.decode("utf-8", errors="replace").strip()
-            if not line.startswith("data:"):
-                continue
-            data = line[5:].strip()
-            if not data or data == "[DONE]":
-                continue
-            try:
-                event = json.loads(data)
-            except json.JSONDecodeError:
-                continue
-            text = ""
-            if is_responses:
-                event_type = event.get("type")
-                if event_type in {"response.output_text.delta", "output_text.delta"}:
-                    text = event.get("delta", "")
-                elif event.get("delta") and isinstance(event["delta"], str):
-                    text = event["delta"]
-                elif event_type == "response.completed":
-                    completed_text = _response_output_text(event.get("response") or {})
-                elif event_type in {"response.failed", "response.incomplete"}:
-                    failed_response = event.get("response") or {}
-                    error = failed_response.get("error") or {}
-                    terminal_error = (
-                        error.get("message")
-                        or (failed_response.get("incomplete_details") or {}).get("reason")
-                        or "AI 响应未完成"
-                    )
-            else:
-                choices = event.get("choices") or []
-                if choices:
-                    text = choices[0].get("delta", {}).get("content") or ""
-            if text:
-                emitted_text = True
-                yield text
-    if not emitted_text and completed_text:
-        yield completed_text
-        emitted_text = True
-    if not emitted_text:
-        raise RuntimeError(terminal_error or "AI 返回了空响应")
-    return model
+    return (yield from llm_client.stream(settings_store.load(), messages))
+
+
+def _screenshot_mode(settings: dict) -> str:
+    model = str(settings.get("model") or "")
+    known_vision = model_vision(str(settings.get("provider") or ""), model)
+    if known_vision is None:
+        return image_mode(model)
+    return "vision" if known_vision else "ocr"
 
 
 def generate_margin_comment(document_id: str, selected_text: str) -> str:
@@ -409,7 +268,7 @@ def _local_answer(
     if not configured:
         lines.extend([
             "",
-            "> 在“设置”中填写 OpenRouter 或 OpenAI 兼容接口后，可获得完整的综合分析与事实校验。",
+            "> 在“设置 → AI 模型”中选择供应商并填写 API Key 后，可获得完整的综合分析与事实校验。",
         ])
     return "\n".join(lines)
 
@@ -464,8 +323,7 @@ def run_agent(body: dict) -> Generator[dict, None, None]:
     screenshot_mode = ""
     if body.get("image_data_url"):
         image_data_url = clean_image_data_url(body.get("image_data_url"))
-        model = str(settings_store.load().get("model") or "")
-        screenshot_mode = image_mode(model)
+        screenshot_mode = _screenshot_mode(settings_store.load())
         if screenshot_mode == "ocr":
             image_ocr_text = windows_ocr(
                 image_data_url,
@@ -593,7 +451,7 @@ def run_agent(body: dict) -> Generator[dict, None, None]:
             )
         answer_parts.append(notice)
         yield {"type": "content", "text": notice}
-    configured = bool(settings_store.load().get("api_key"))
+    configured = settings_store.ai_configured(settings_store.load())
     try:
         if configured:
             generated_chars = 0

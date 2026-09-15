@@ -9,7 +9,7 @@ import urllib.request
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QUrl
-from PyQt6.QtGui import QColor, QIcon
+from PyQt6.QtGui import QColor, QDesktopServices, QIcon
 from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QApplication, QMainWindow
@@ -18,10 +18,25 @@ from config import APP_ID, APP_NAME, BASE_DIR, PORT
 from web_server import start_server
 
 
+LOCAL_HOSTS = {"127.0.0.1", "localhost"}
+
+
 class DesktopPage(QWebEnginePage):
     def javaScriptConsoleMessage(self, level, message, line, source):
         if os.getenv("INKREAD_DEBUG"):
             print(f"[web:{line}] {message}")
+
+    def acceptNavigationRequest(self, url: QUrl, nav_type, is_main_frame: bool) -> bool:
+        # External links (key consoles, web sources) belong in the system browser;
+        # the embedded view must stay on the local UI.
+        if url.scheme() in {"http", "https"} and url.host() not in LOCAL_HOSTS:
+            QDesktopServices.openUrl(url)
+            return False
+        return super().acceptNavigationRequest(url, nav_type, is_main_frame)
+
+    def createWindow(self, _window_type):
+        # target="_blank" opens a throwaway page whose navigation is redirected above.
+        return DesktopPage(self)
 
 
 class MainWindow(QMainWindow):

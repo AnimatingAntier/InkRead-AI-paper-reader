@@ -737,7 +737,7 @@ export function PdfReader({
   useEffect(() => {
     const keyDown = (event: KeyboardEvent) => {
       if (isEditingTarget(event.target)) return
-      if (window.document.querySelector('.modal-backdrop, .screenshot-overlay')) return
+      if (window.document.querySelector('.settings-page, .screenshot-overlay')) return
       if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
         if (event.key === 'ArrowLeft') {
           event.preventDefault()

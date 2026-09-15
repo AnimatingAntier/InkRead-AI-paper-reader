@@ -76,32 +76,12 @@ export interface ScreenshotAttachment {
   ocrText: string
 }
 
-export interface ProviderCatalogEntry {
-  id: string
-  name: string
-  base_url: string
-  key_url: string
-  api_style: 'chat_completions' | 'responses'
-  needs_base_url: boolean
-}
-
-export interface ProviderModel {
-  id: string
-  name: string
-}
-
-export interface ProviderSlot {
-  has_key: boolean
-  api_key: string
-  model: string
-  base_url: string
-  models: ProviderModel[]
-  models_updated_at: string
-}
-
 export interface AppSettings {
   provider: string
   api_key: string
+  /** Masked keys remembered per provider; never contains plaintext. */
+  api_keys: Record<string, string>
+  model_cache: Record<string, ModelCacheEntry>
   model: string
   base_url: string
   serpapi_key: string
@@ -112,8 +92,54 @@ export interface AppSettings {
   fact_check: boolean
   configured: boolean
   translation_configured: boolean
-  catalog?: ProviderCatalogEntry[]
-  providers?: Record<string, ProviderSlot>
+}
+
+export interface ProviderModel {
+  id: string
+  name: string
+  vision: boolean
+  free: boolean
+}
+
+export interface ModelCacheEntry {
+  fetched_at: number
+  models: ProviderModel[]
+}
+
+export interface ProviderModelGroup {
+  label: string
+  models: ProviderModel[]
+}
+
+export interface ProviderInfo {
+  id: string
+  label: string
+  tagline: string
+  base_url: string
+  protocol: 'chat' | 'responses' | 'anthropic' | 'gemini'
+  key_url: string
+  key_placeholder: string
+  key_required: boolean
+  custom_base_url: boolean
+  supports_model_listing: boolean
+  default_model: string
+  region: 'global' | 'cn' | 'local'
+  groups: ProviderModelGroup[]
+}
+
+export interface ProviderCatalog {
+  default_provider: string
+  providers: ProviderInfo[]
+}
+
+export interface AiTestResult {
+  ok: boolean
+  provider: string
+  model: string
+  protocol: string
+  latency_ms: number
+  reply?: string
+  error?: string
 }
 
 export interface TranslationResult {

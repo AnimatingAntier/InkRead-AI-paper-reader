@@ -4,7 +4,8 @@ import base64
 import unittest
 from unittest.mock import patch
 
-from agent_service import _prepare_api_messages, run_agent
+from agent_service import _screenshot_mode, run_agent
+from llm_client import _chat_messages, _responses_input
 from ocr_service import clean_image_data_url, image_mode, windows_ocr
 
 
@@ -15,6 +16,20 @@ class ScreenshotAiTests(unittest.TestCase):
         self.assertEqual(image_mode("openrouter/free"), "ocr")
         self.assertEqual(image_mode("deepseek-r1"), "ocr")
         self.assertEqual(image_mode("future-vision-model"), "vision")
+
+    def test_catalog_vision_flag_overrides_name_heuristics(self) -> None:
+        self.assertEqual(
+            _screenshot_mode({"provider": "opencode_go", "model": "glm-5.3"}),
+            "ocr",
+        )
+        self.assertEqual(
+            _screenshot_mode({"provider": "opencode_go", "model": "mimo-v2.5"}),
+            "vision",
+        )
+        self.assertEqual(
+            _screenshot_mode({"provider": "openai_compatible", "model": "my-local-model"}),
+            "vision",
+        )
 
     def test_image_data_url_is_validated(self) -> None:
         raw = b"\x89PNG\r\n\x1a\n" + b"test"
@@ -31,8 +46,8 @@ class ScreenshotAiTests(unittest.TestCase):
                 "image_data_url": "data:image/png;base64,AAAA",
             }
         ]
-        responses = _prepare_api_messages(messages, True)
-        chat = _prepare_api_messages(messages, False)
+        _instructions, responses = _responses_input(messages)
+        chat = _chat_messages(messages)
         self.assertEqual(responses[0]["content"][1]["type"], "input_image")
         self.assertEqual(chat[0]["content"][1]["type"], "image_url")
 

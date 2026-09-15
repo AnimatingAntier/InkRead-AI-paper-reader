@@ -58,19 +58,19 @@ python app.py
 - 同一选区译文采用会话级缓存；切换侧栏后再次查看不会重复消耗百度翻译额度
 - 论文阅读区框选截图，可预览后随问题发送给 AI；支持 PDF、Markdown、公式、图表和现有标注
 - 多模态模型直接接收截图；文本模型自动调用 Windows 本机 OCR，并以论文文字层作为离线兜底
-- AI 设置按供应商选择并粘贴 API Key；已配置供应商的模型列表会在启动时自动刷新，内置目录仅作缓存为空时的后备
+- 全屏 AI 设置页：15 个内置供应商，选供应商、填 Key、选模型三步完成；模型列表分组显示名称与 ID，并可自动拉取供应商最新模型
 - PDF 与 Markdown 通用遮挡卡：可拖动、八方向缩放，并能在不透明复习和透明查看模式间即时切换
 - 文档独立命名空间检索，避免多篇论文上下文串库
 - 调度中枢、长上下文、网络检索、事实校验四类 Agent 的可视化协作轨迹
 - 论文原文 `[P#]` 与网络来源 `[W#]` 强制隔离
 - Semantic Scholar、Crossref 与 Google Scholar / SerpApi 学术检索
-- 内置 OpenRouter、OpenAI、OpenCode Zen、DeepSeek、Moonshot、阿里云百炼、智谱、SiliconFlow、Groq、xAI、Gemini 与自定义 OpenAI 兼容接口；各供应商密钥独立保存
+- 统一支持 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages 与 Google Gemini 四种流式协议，按供应商与模型自动选择
 - AI 流式输出、来源抽屉、引用覆盖检查和低置信度提示
 - AI 生成期间发送按钮自动切换为暂停按钮，可立即中断请求并保留已经生成的回答、来源和 Agent 轨迹
 - 自动识别“最近、近期、SOTA、优于”等需要联网的问题
 - 自动识别论文中缺少解释的术语问题，并尝试补充网络资料
 - 论文和网络资料不足时，允许 AI 使用既有知识继续回答，同时明确标记为“需复核”
-- OpenCode Zen 返回空正文时自动读取最终事件或使用精简上下文重试
+- AI 返回空正文时自动读取最终事件或使用精简上下文重试
 - 夜读、沉浸模式、响应式多栏布局
 - 夜读模式为阅读进度区提供高对比文字与环形进度配色
 - 进入和退出沉浸模式时，左右栏淡入淡出并平滑收拢或展开
@@ -103,25 +103,21 @@ AI 会在每篇论文的独立命名空间中检索，减少不同论文内容�
 
 ## AI 设置
 
-打开左侧齿轮，在“AI、检索与翻译设置”中：
+点击左侧齿轮（或 `Ctrl+,`）打开全屏设置页，分为“AI 模型 / 学术检索 / 翻译 / 阅读与批注”四类。AI 模型页只需三步：
 
-- 选择供应商，然后粘贴该供应商的 API Key。目录内供应商无需填写 Base URL。
-- 各供应商的密钥与上次使用的模型独立保存；切换供应商会自动恢复，不必重新输入。
-- 若尚未填写 Key，设置页会提示并给出该供应商的官方申请链接。
-- 自定义 OpenAI 兼容接口仍需填写 Base URL（例如 `https://api.example.com/v1`）和 Key。
-- 模型下拉优先使用该供应商最近一次成功拉取的列表；启动时会在后台刷新所有已配置供应商的模型，超时不阻塞界面。内置目录仅在缓存为空时作为后备。
-- SerpApi API Key（可选，用于 Google Scholar 检索）
-- 百度翻译 APP ID 与 API Key（可选；不填写时直接使用本地英译中）
+1. 选择供应商（接口地址已内置，无需填写 Base URL）
+2. 填写该供应商的 API Key（每个供应商的 Key 单独记忆，切换供应商不会丢失）
+3. 选择模型：内置常用模型目录；对支持列表接口且已填 Key 的供应商，打开设置页或切换供应商时会自动在后台拉取最新模型列表（先显示上次结果，拉取失败则保留内置目录），也可手动“拉取在线列表”或直接输入模型 ID
 
-未填写当前供应商的 AI Key 时，检索 Agent 与本地事实校验仍可运行，并展示命中的原文片段；填写后会生成完整综合回答。
+随后可点“测试连接”验证密钥、模型与协议是否匹配，再保存。`Ctrl+S` 保存；有未保存修改时离开会提示保存或放弃。
 
-当前已支持的供应商：
+内置供应商：OpenRouter（默认，含 `:free` 免费模型）、OpenCode Go、OpenAI、Anthropic、Google Gemini、DeepSeek、Moonshot Kimi、阿里云百炼、智谱 GLM、MiniMax、火山引擎、硅基流动、xAI Grok、Ollama（本地），以及任意 OpenAI 兼容接口。协议（Chat Completions / Responses / Anthropic Messages / Gemini）由程序按供应商和模型自动选择。
 
-- OpenRouter、OpenAI、DeepSeek、Moonshot / Kimi、阿里云百炼 / Qwen、智谱 GLM、SiliconFlow、Groq、xAI Grok、Google Gemini
-- OpenCode Zen（Responses API）
-- 自定义 OpenAI 兼容 Chat Completions
+免费模型通常有限流，遇到 `429` 时稍后重试或换一个模型即可。旧版本保存的 OpenCode Zen 配置在升级后会自动回退到默认供应商。
 
-设置和密钥只保存在本机 `%LOCALAPPDATA%\InkRead\settings.json`。调用 AI 时，问题和相关论文片段会发送给所配置的 AI 服务。
+未填写 AI Key 时，检索 Agent 与本地事实校验仍可运行，并展示命中的原文片段；填写后会生成完整综合回答。
+
+设置和密钥只保存在本机 `%LOCALAPPDATA%\InkRead\settings.json`。调用 AI 时，问题和相关论文片段只会发送给所选供应商。
 
 百度大模型文本翻译需要同一百度翻译开放平台账号下的 `APP ID` 和 `API Key`。InkRead 每次启动会用一个极短文本检测百度是否可用；百度可用时优先调用，检测到额度耗尽或服务不可用时自动切换本地翻译。本地模型首次启用时下载约 160 MB 至 `%LOCALAPPDATA%\InkRead\models`，以后可离线使用且没有按字数计费。使用百度时只有当前英文选区会被发送；使用本地模型时选区不会离开设备。
 

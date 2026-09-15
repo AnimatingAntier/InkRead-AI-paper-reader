@@ -5,6 +5,7 @@ import mimetypes
 import os
 import re
 import traceback
+import urllib.error
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -22,8 +23,9 @@ from document_store import (
     source_path,
     update_progress,
 )
+import llm_client
+import providers
 import settings_store
-from provider_catalog import kick_model_refresh, public_catalog
 from translation_service import (
     reset_translation_status,
     translate_to_chinese,
@@ -33,7 +35,7 @@ from translation_service import (
 
 class InkReadHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
-    server_version = "InkRead/1.1"
+    server_version = "InkRead/1.0"
 
     def log_message(self, format: str, *args) -> None:
         return
@@ -102,15 +104,9 @@ class InkReadHandler(BaseHTTPRequestHandler):
             elif path == "/api/documents":
                 self.send_json({"documents": list_documents()})
             elif path == "/api/settings":
-                kick_model_refresh()
                 self.send_json(settings_store.public())
             elif path == "/api/providers":
-                kick_model_refresh()
-                public = settings_store.public()
-                self.send_json({
-                    "catalog": public.get("catalog") or public_catalog(),
-                    "providers": public.get("providers") or {},
-                })
+                self.send_json(providers.catalog())
             elif path == "/api/translation/status":
                 query = urllib.parse.parse_qs(parsed.query)
                 force = (query.get("force") or ["0"])[0] == "1"
@@ -152,13 +148,17 @@ class InkReadHandler(BaseHTTPRequestHandler):
                     raise ValueError("缺少文件名")
                 self.send_json(import_bytes(filename, self.read_body()), 201)
             elif path == "/api/settings":
-                body = self.read_json()
-                updated = settings_store.update(body)
+                updated = settings_store.update(self.read_json())
                 reset_translation_status()
-                posted_key = body.get("api_key") if isinstance(body, dict) else None
-                if posted_key and not settings_store._is_mask(posted_key):
-                    kick_model_refresh()
                 self.send_json(updated)
+            elif path == "/api/ai/models":
+                merged = settings_store.merged(self.read_json())
+                models = llm_client.list_models(merged)
+                entry = settings_store.remember_models(str(merged.get("provider") or ""), models)
+                self.send_json({"models": models, "fetched_at": entry["fetched_at"]})
+            elif path == "/api/ai/test":
+                merged = settings_store.merged(self.read_json())
+                self.send_json(llm_client.test_connection(merged))
             elif path == "/api/translate":
                 self.send_json(translate_to_chinese(str(self.read_json().get("text") or "")))
             elif path == "/api/annotations/generate":
@@ -176,8 +176,10 @@ class InkReadHandler(BaseHTTPRequestHandler):
                 self.stream_agent(self.read_json())
             else:
                 self.send_json({"error": "接口不存在"}, 404)
-        except ValueError as exc:
+        except (ValueError, RuntimeError) as exc:
             self.send_json({"error": str(exc)}, 400)
+        except urllib.error.URLError as exc:
+            self.send_json({"error": f"网络连接失败：{exc.reason}"}, 502)
         except Exception as exc:
             traceback.print_exc()
             self.send_json({"error": str(exc)}, 500)
@@ -233,7 +235,9 @@ class InkReadHandler(BaseHTTPRequestHandler):
         if not candidate.is_file():
             self.send_json({"error": "前端尚未构建，请运行 npm run build"}, 503)
             return
-        self.send_file(candidate)
+        # Hashed assets are immutable; the entry page must always be revalidated or an
+        # updated build keeps loading the previous bundle from the WebEngine cache.
+        self.send_file(candidate, cache=candidate.name != "index.html")
 
     def _write_chunk(self, data: bytes) -> None:
         self.wfile.write(f"{len(data):X}\r\n".encode("ascii"))
@@ -266,7 +270,6 @@ class InkReadHandler(BaseHTTPRequestHandler):
 
 
 def start_server(port: int = PORT) -> None:
-    kick_model_refresh()
     server = ThreadingHTTPServer(("127.0.0.1", port), InkReadHandler)
     server.daemon_threads = True
     server.serve_forever()
